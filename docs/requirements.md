@@ -1,7 +1,7 @@
 # User Story Health Agent — Requirements Pack (Phase 1)
 
 **Status:** Freeze draft (Gugan) — 29 Sep 2026  
-**Revision:** 29 Sep 2026 — dummy story **121213** (SNAP Login Screen) and test plan **121214** / suite **121215** read from the signed-in Ecom MVP session. Acceptance criteria live in the description; the AC field is empty; no bug and no test links.  
+**Revision:** 29 Sep 2026 — dummy story **121213** recorded in §6.2. D6/D10 and the 8 GB local-model dev runtime (D7) are proposed-locked in `docs/orchestration-and-cost.md`. PDF library stays open.  
 **Sprint window this pack covers:** Week 2 planning (25–28 Aug 2026) + close-out  
 **Repo:** https://github.com/Gugan-Ananth-A/story-guard-mvp  
 **Companion workbook:** `Story Guard - Week 2 - User Stories & Setup.xlsx`  
@@ -9,7 +9,7 @@
 **Dummy-data rule:** no live team project, no production agent loop this pack.
 
 This document freezes the problem, users, phase-1 boundary, data sources, scorecard *intent*, generation gates, and phase map.  
-It does **not** freeze the orchestrator, default LLM, or PDF library — those stay in the decision log as TBD (owners below).
+D6 (orchestrator), D10 (single pipeline), and the development runtime (D7: local model on an 8 GB Mac) are a **proposed lock** in `docs/orchestration-and-cost.md`. PDF library (D8) stays TBD (TBD-ARCH-2).
 
 ---
 
@@ -101,9 +101,9 @@ Tighter than phase 1. This pack is documents + contracts + static mocks, not shi
 - No production-form agent loop (no parser → auditor → writer pipeline that “is the product”).
 - No live project connection. Dummy org / fixtures only. Never point code at a real delivery board.
 - No pixel-perfect PDF engine in the planning week. Static mock PDF or formatted doc that shows section order. Rendering library is a stack decision, not a design debate.
-- No model bake-off. Pick one default LLM + one fallback line.
+- No model bake-off. Development default is **Qwen3.5 4B** via Ollama; fallback is **Phi-4 Mini**. Both fit an 8 GB Mac. Context loaded at 8,192. See `docs/orchestration-and-cost.md` §4.5.
 - No Azure Test Plans dependency. JSON / SQLite dummy store is the default.
-- No dual-track orchestrators. Pick LangGraph **or** CrewAI **or** a single agent + tools. Do not design both.
+- No dual-track orchestrators. Proposed lock: **LangGraph** as a graph of code nodes, and **one** narrative LLM call. CrewAI, and a LangGraph supervisor over specialist models, are out of phase 1 (`docs/orchestration-and-cost.md`).
 - No scope leaks into Slack / Jira / dashboards / billing / mid-flow HITL.
 
 ---
@@ -120,6 +120,8 @@ Tighter than phase 1. This pack is documents + contracts + static mocks, not shi
 | Mapping | Explicit links in dummy data | Embedding / LLM-guessed AC ↔ test mapping as truth |
 | Coverage numbers | Copied from fixture / adapter | Invented by the model |
 | Operator | Local CLI / script QA can run | Multi-tenant SaaS |
+| Orchestration | LangGraph code-node graph; code scores; one narrative call | CrewAI crew, supervisor of specialist LLMs, a second orchestrator |
+| Narrative model (dev) | Local Ollama on an 8 GB Mac: Qwen3.5 4B, fallback Phi-4 Mini, context 8,192 | Hosted API, a 7B+ model, a second model loaded beside the writer |
 
 ---
 
@@ -202,7 +204,7 @@ P14, P15, N01, N02, and A01 have no matching scenario in the description. Sittin
 
 | Gap | Why it still matters |
 | --- | --- |
-| Which field is “the AC”? | H1 as written looks at an AC field. On this story that field is empty and the description is not. |
+| Which field is “the AC”? | H1 as written looks at an AC field. On this story that field is empty and the description is not. Splitting that text into AC ids is deterministic (numbering or a fixture list). It is not an LLM parse (`docs/orchestration-and-cost.md` §4.1). |
 | Stable `ac_id`s and `mapped_ac_ids` | H4 has nothing explicit to count. A topical resemblance is not a link. |
 | Coverage type on each test | H5 and H6. P / N / A is not that enum. N02 is a session refresh; A01 is a UI checklist. |
 | A bug work item | This story’s bug count is zero. The FIX-BUGGY persona still needs its own bug. |
@@ -327,7 +329,8 @@ Treat as the expanded G1–G3 family. All of these fail closed (no PDF) unless m
 | Process template has no AC field | Structural schema mismatch | Hard |
 | Test Plans / dummy pack unreachable | Generate and say tests are missing | **Soft** |
 | Report PDF template missing or corrupted | Nothing to render into | Hard |
-| Generation exceeds a hard timeout | Do not hang forever | Hard |
+| Generation exceeds a hard timeout | Do not hang forever. Dev model call: **60 s** of generation after the weights are loaded, or **8,192** tokens, whichever first (`docs/orchestration-and-cost.md` §4.1). Target for that call is ≤ 4,096 tokens. | Hard |
+| Narrative JSON fails its schema | Retry the one narrative call once, then no PDF | Hard |
 
 **TBD-GATES-1** (Rithika, Vignesh reviews): lock G4 and G5. Write `docs/gates.md` as the build-week checklist.
 
@@ -388,41 +391,41 @@ Static mocks for FIX-HEALTHY and one unhealthy fixture are the UX spec for the b
 
 ## 11. System intent (phase 1, not a platform)
 
+Proposed lock, 29 Sep 2026: **D6 LangGraph** as control flow, **D10 one pipeline**. Full argument, reversal test, and cost rules: `docs/orchestration-and-cost.md`. This section is the requirements view of that lock.
+
 ```
-Story ID
-   │
-   ▼
-Hard gates (G1–G3 + hard-stop list)
-   │
-   ├──────────────► ADO adapter (story + relations/bugs)     [dummy project or recorded spike]
-   └──────────────► Dummy TMS adapter (tests + coverage)     [fixtures]
-   │
-   ▼
-Deterministic scoring engine (H1–H11 from fields, no LLM)
-   │
-   ▼
-Narrative writer (LLM cites engine counts only)
-   │
-   ▼
-Markdown template → PDF
-   │
-   ▼
-QA reviews, then shares
+generate --story-id
+        │
+        ▼
+ [LangGraph — Python nodes, one LLM node]
+        │
+        ├─ gate_input          hard stops, no model
+        ├─ fetch_story         ADO adapter
+        ├─ fetch_tests         dummy TMS adapter
+        ├─ fetch_bugs          ADO relations, or the dummy bug record
+        ├─ validate_contract   schema check, no model
+        ├─ score_health        H1–H11 in code, no model
+        ├─ write_narrative     one structured LLM call over the score object
+        └─ render_pdf          markdown template → PDF
+        │
+        ▼
+ QA reviews the PDF, then shares
 ```
 
 Rules the architecture must obey:
 
-- Adapters first. Evaluation does not speak ADO JSON.
-- Coverage numbers come from data, not from the model.
-- One orchestrator in phase 1.
-- Markdown-first so QA can diff; PDF is a render step.
-- Cost constraint for the build week: cache the rubric, prune tool schemas, do not default to a multi-agent crew.
+- Adapters first. The scorer and the narrative node do not speak raw ADO JSON. The narrative node receives the score object.
+- Coverage numbers, RAG, and `mapped_ac` come from code and explicit links. The model cites them. It does not change them, and it has no tools on this call.
+- One orchestrator. A specialist crew (parser, AC auditor, coverage analyst, bug correlator, writer) is out, including the same shape drawn as a LangGraph supervisor.
+- One LLM call per successful generate, against the local model in `docs/orchestration-and-cost.md` §4.5. The runner’s JSON mode constrains it. A schema failure retries that call once, then fails closed. A second call for a QA rewrite is later-phase HITL.
+- AC splitting is deterministic. Markdown-first so QA can diff; PDF is a render step.
+- Dev caps bind the build week: context loaded at 8,192, narrative target ≤ 4,096 tokens, hard stop at 8,192 tokens or 60 s of generation. Do not raise the context to fit a raw work-item blob.
 
 The Thursday architecture review draft that introduces a Web UI, API gateway, and application database is a **later** shape. It is not phase 1.
 
-**TBD-ARCH-1** (Gugan + Devs): lock D6 orchestrator and D10 single vs multi-agent.  
-**TBD-ARCH-2** (Valliammai): lock D7 default LLM + fallback, D8 PDF library.  
-**TBD-ARCH-3** (Gugan): write the cost-constraints paragraph into `docs/architecture.md`.
+**TBD-ARCH-1** (Gugan): D6 and D10 are proposed-locked in `docs/orchestration-and-cost.md`. Remaining action is to paste those decision-log rows into the workbook. Re-open only if §6 of that doc is met.  
+**TBD-ARCH-2** (Valliammai): D7 development runtime is locked in `docs/orchestration-and-cost.md` §4.5. D8 PDF library is still open.  
+**TBD-ARCH-3** (Gugan): the cost-constraints paragraph is written in `docs/orchestration-and-cost.md` §4. Copy it into `docs/architecture.md` when that file exists. A breach of those caps is a defect.
 
 ---
 
@@ -451,11 +454,11 @@ The Thursday architecture review draft that introduces a Web UI, API gateway, an
 | TBD-FIX-1 | One fixture ID scheme + 5 JSON files | Rithika, Vignesh | Evals, mock PDFs |
 | TBD-FIX-2 | Mock-report section order | Valliammai, Rithika | Mock PDFs |
 | TBD-REPORT-1 / 2 | Outline freeze + QA critique | Valliammai, Rithika, Vignesh | PDF template |
-| TBD-ARCH-1 | Single agent vs crew; orchestrator | Gugan | Build-week B5 / graph shape |
-| TBD-ARCH-2 | Default LLM + PDF library | Valliammai | B1, B6 |
-| TBD-ARCH-3 | Cost constraints section | Gugan | Prompt / graph design |
+| TBD-ARCH-1 | D6/D10 proposed lock is written. Paste the workbook rows. Do not re-open without the reversal test in `docs/orchestration-and-cost.md` §6. | Gugan | Workbook decision log |
+| TBD-ARCH-2 | D7 dev runtime is locked (local, 8 GB Mac). D8 PDF library is still open. | Valliammai | B6 |
+| TBD-ARCH-3 | Copy `docs/orchestration-and-cost.md` §4 into `docs/architecture.md` | Gugan | One architecture home for the caps |
 | TBD-PLAN-1 | Next-week backlog resized to 1–2 hrs/day | Gugan + all | Monday start |
-| TBD-PLAN-2 | Decision log D5–D10 dated and closed | Gugan | Stop relitigating Tuesday |
+| TBD-PLAN-2 | Decision log D5–D10 dated and closed. D6 and D10 are proposed-locked (29 Sep 2026) in `docs/orchestration-and-cost.md`; the workbook copy is still outstanding. | Gugan | Stop relitigating Tuesday |
 | TBD-PLAN-3 | Risk register rows owned and mitigated | All; Gugan on R4, R6, R7 | Build week |
 
 ---
@@ -486,6 +489,7 @@ Build-week code must not start on a TBD as if it were closed.
 | Metrics worked examples | `Story guard - Metrics Report.xlsx` | feed fixtures, do not remain the contract |
 | Dataset spec | Google Doc | `/fixtures/SCHEMA.md` |
 | Architecture + ADO spike notes | Google Doc + architecture review write-up | `/docs/architecture.md`, `/docs/ado-adapter.md` |
+| D6 / D10 and cost caps | `docs/orchestration-and-cost.md` | same file; paste the decision-log rows into the workbook; copy §4 into `/docs/architecture.md` |
 | Gates | This pack §8 + workbook seed | `/docs/gates.md` |
 | Repo skeleton | https://github.com/Gugan-Ananth-A/story-guard-mvp | `/docs`, `/fixtures`, `/artifacts`, `.env.example` |
 
