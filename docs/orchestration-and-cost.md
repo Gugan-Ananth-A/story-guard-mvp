@@ -95,7 +95,7 @@ LangGraph here means **control flow**, not **a crew**. A supervisor node that de
 
 ## 4. Cost constraints (bind the build week)
 
-These are constraints, not a bake-off. Put them in `docs/architecture.md` and treat a breach as a defect.
+These are constraints, not a bake-off. The plan for rubric caching, tool-schema pruning, and context isolation is `docs/architecture.md`. That plan is not implemented this week. A breach of either file is a defect.
 
 ### 4.1 Budget
 
@@ -229,17 +229,5 @@ A desire to “look more agentic” in a demo is not a reversal criterion.
 | B7 CLI `generate --story-id` | Thin graph invoke, or functions with the same node list. |
 | B8 Eval on 5 fixtures | Assert headlines and RAG from the **engine**, then that the prose cites those numbers. Do not eval “does the crew sound like QA.” |
 | Architecture diagram | Replace the Web UI / API / DB drawing with the graph in §1. |
-
----
-
-## 8. Sources used for the cost argument
-
-Internal week-2 notes already required this decision to look at Anthropic’s agent-design and multi-agent-cost write-ups. The figures cited above:
-
-- Anthropic Engineering, *How we built our multi-agent research system* (Jun 2025): agents ~4× a chat, multi-agent ~15× a chat; +90.2% on an internal research eval vs single-agent Opus; token usage explained most of the variance. That task class is breadth-first research, not a 1-story scorecard.  
-- Anthropic, *When to use multi-agent systems*: crews typically 3–10× tokens; wins when context pollution, parallelism, or disjoint toolboxes are real; many teams would have been fine with a better single-agent prompt.  
-- Matched-budget follow-ups (2026): once tokens are equalised, a single agent is often even or ahead on multi-hop reasoning — i.e. a lot of the crew lift *is* the extra spend.
-
-We are not claiming those papers measured user-story health reports. We are claiming our task does not look like the task they paid 15× to solve.
 
 

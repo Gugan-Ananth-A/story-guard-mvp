@@ -1,7 +1,7 @@
 # User Story Health Agent — Requirements Pack (Phase 1)
 
 **Status:** Freeze draft (Gugan) — 29 Sep 2026  
-**Revision:** 29 Sep 2026 — dummy story **121213** recorded in §6.2. D6/D10 and the 8 GB local-model dev runtime (D7) are proposed-locked in `docs/orchestration-and-cost.md`. PDF library stays open.  
+**Revision:** 29 Sep 2026 — dummy story **121213** recorded in §6.2. D6/D10 and the 8 GB local runtime (D7) are proposed-locked in `docs/orchestration-and-cost.md`. Rubric-cache, tool-schema, and context-isolation constraints are in `docs/architecture.md` (not built this week). PDF library stays open.  
 **Sprint window this pack covers:** Week 2 planning (25–28 Aug 2026) + close-out  
 **Repo:** https://github.com/Gugan-Ananth-A/story-guard-mvp  
 **Companion workbook:** `Story Guard - Week 2 - User Stories & Setup.xlsx`  
@@ -425,7 +425,7 @@ The Thursday architecture review draft that introduces a Web UI, API gateway, an
 
 **TBD-ARCH-1** (Gugan): D6 and D10 are proposed-locked in `docs/orchestration-and-cost.md`. Remaining action is to paste those decision-log rows into the workbook. Re-open only if §6 of that doc is met.  
 **TBD-ARCH-2** (Valliammai): D7 development runtime is locked in `docs/orchestration-and-cost.md` §4.5. D8 PDF library is still open.  
-**TBD-ARCH-3** (Gugan): the cost-constraints paragraph is written in `docs/orchestration-and-cost.md` §4. Copy it into `docs/architecture.md` when that file exists. A breach of those caps is a defect.
+**TBD-ARCH-3** (Gugan): rubric-cache, tool-schema pruning, and context-isolation constraints are in `docs/architecture.md`. Not implemented this week. A breach is a defect.
 
 ---
 
@@ -456,7 +456,7 @@ The Thursday architecture review draft that introduces a Web UI, API gateway, an
 | TBD-REPORT-1 / 2 | Outline freeze + QA critique | Valliammai, Rithika, Vignesh | PDF template |
 | TBD-ARCH-1 | D6/D10 proposed lock is written. Paste the workbook rows. Do not re-open without the reversal test in `docs/orchestration-and-cost.md` §6. | Gugan | Workbook decision log |
 | TBD-ARCH-2 | D7 dev runtime is locked (local, 8 GB Mac). D8 PDF library is still open. | Valliammai | B6 |
-| TBD-ARCH-3 | Copy `docs/orchestration-and-cost.md` §4 into `docs/architecture.md` | Gugan | One architecture home for the caps |
+| TBD-ARCH-3 | Constraints are in `docs/architecture.md`. Implementation of cache, tool pruning, and isolation waits. | Gugan | None this week |
 | TBD-PLAN-1 | Next-week backlog resized to 1–2 hrs/day | Gugan + all | Monday start |
 | TBD-PLAN-2 | Decision log D5–D10 dated and closed. D6 and D10 are proposed-locked (29 Sep 2026) in `docs/orchestration-and-cost.md`; the workbook copy is still outstanding. | Gugan | Stop relitigating Tuesday |
 | TBD-PLAN-3 | Risk register rows owned and mitigated | All; Gugan on R4, R6, R7 | Build week |
@@ -489,7 +489,8 @@ Build-week code must not start on a TBD as if it were closed.
 | Metrics worked examples | `Story guard - Metrics Report.xlsx` | feed fixtures, do not remain the contract |
 | Dataset spec | Google Doc | `/fixtures/SCHEMA.md` |
 | Architecture + ADO spike notes | Google Doc + architecture review write-up | `/docs/architecture.md`, `/docs/ado-adapter.md` |
-| D6 / D10 and cost caps | `docs/orchestration-and-cost.md` | same file; paste the decision-log rows into the workbook; copy §4 into `/docs/architecture.md` |
+| D6 / D10 and cost caps | `docs/orchestration-and-cost.md` | same file; paste the decision-log rows into the workbook |
+| Rubric cache, tool schemas, context isolation | `docs/architecture.md` | same file; constraints only this week |
 | Gates | This pack §8 + workbook seed | `/docs/gates.md` |
 | Repo skeleton | https://github.com/Gugan-Ananth-A/story-guard-mvp | `/docs`, `/fixtures`, `/artifacts`, `.env.example` |
 
