@@ -1,8 +1,11 @@
-"""Command line entry. Later slices add the graph and generate."""
+"""Command line entry. Later slices add generate on this command."""
+
+from story_guard.graph import run
 
 
 def main() -> int:
-    print("usage: story-guard")
+    state = run()
+    print(f"graph={state['graph']}")
     return 0
 
 
