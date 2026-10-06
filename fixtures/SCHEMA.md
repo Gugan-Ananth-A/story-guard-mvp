@@ -11,10 +11,11 @@ This file is the canonical field contract for fixture records. Field names use `
 | `type` | Work-item type |
 | `state` | Current story state |
 | `description` | Story description |
-| `area` | Area path or equivalent |
-| `iteration` | Iteration path or equivalent |
+| `area` | Area path or equivalent; `null` when omitted from a sanitized fixture |
+| `iteration` | Iteration path or equivalent; `null` when omitted from a sanitized fixture |
 | `raw_ac_text` | Original acceptance-criteria text from the source |
 | `acceptance_criteria` | Discrete `AcceptanceCriterion` records for this story |
+| `notes` | Story-level source observations; these do not create test-to-criterion links |
 
 ## AcceptanceCriterion
 
@@ -31,7 +32,7 @@ This file is the canonical field contract for fixture records. Field names use `
 | --- | --- |
 | `id` | Stable test-case identifier |
 | `title` | Test-case title |
-| `type` | One of `happy`, `negative`, `edge`, `security`, or `adhoc` |
+| `type` | One of `happy`, `negative`, `edge`, `security`, or `adhoc` when known; `null` when the fixture does not record a classification |
 | `mapped_ac_ids` | Explicitly linked acceptance-criterion identifiers; an empty list means no criteria are linked |
 | `last_result` | Most recent execution result, when available |
 | `last_result_at` | Timestamp of the most recent execution result, when available |
