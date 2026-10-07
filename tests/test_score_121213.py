@@ -1,4 +1,4 @@
-"""Health counts for story 121213, read from fixtures/FIX-121213.json."""
+"""Published counts for story 121213. The numbers are the literals in fixtures/FIX-121213.md."""
 
 import json
 from pathlib import Path
@@ -38,6 +38,7 @@ def _load() -> dict:
 
 
 def test_score_fixture_counts():
+    # Expected numbers are the literals on fixtures/FIX-121213.md.
     record = _load()
     score = score_health(record)
     assert SR_1 == "SR-1"
@@ -52,6 +53,10 @@ def test_score_fixture_counts():
     assert [row["ac_id"] for row in score["scenarios"]] == [f"AC-{i}" for i in range(1, 9)]
     assert all(row["covered"] is False for row in score["scenarios"])
     assert all(row["mapped_test_ids"] == [] for row in score["scenarios"])
+    mapped_ids = set()
+    for row in score["scenarios"]:
+        mapped_ids.update(row["mapped_test_ids"])
+    assert mapped_ids == set()
     assert all(row["depth"] == "None" for row in score["scenarios"])
     assert all(row["gap"] == "No coverage" for row in score["scenarios"])
     assert all(row["row_status"] == "none" for row in score["scenarios"])
