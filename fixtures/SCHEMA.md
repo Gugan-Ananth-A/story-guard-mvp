@@ -30,7 +30,11 @@ Keys: `id`, `title`, `type`, `mapped_ac_ids`, `last_result`, `last_result_at`, `
 
 ## BugRecord
 
-Keys: `id`, `title`, `severity`, `priority`, `status`, `age`, `found_in`, `linked_story_id`, `linked_tc_id`.
+Keys: `id`, `title`, `severity`, `priority`, `status`, `age`, `found_in`, `linked_story_id`, `linked_tc_id`, `assigned_to`, `application`, `created`.
+
+`priority` is `P1`, `P2`, `P3`, or `P4` when the source has it. The scorer does not copy `severity` into `priority`.
+
+`assigned_to`, `application`, and `created` may be an empty string. The bug table in `docs/requirements.md` §10 prints a blank cell for an empty string. Story 121213 has no bug rows, so those three keys are unused on that file. A bug record that omits them still matches this sprint's contract. When the key is present it is a string.
 
 ## Fixture file
 

@@ -3,7 +3,7 @@
 **Owner:** Gugan (S5)
 **Depends on:** [03](03-langgraph-path.md), [09](09-score-121213.md)
 **Size:** S
-**Status:** Done (30 Sep 2026)
+**Status:** Rework (7 Oct 2026). The four-node path landed 30 Sep 2026. The score check below replaces `rag` Red once slice 09 returns story health.
 
 ## Outcome
 
@@ -39,7 +39,7 @@ story-guard score --story-id 121213
 story-guard score --story-id 999999 ; echo exit:$?
 ```
 
-The first command prints JSON with `rag` Red, `mapped_count` 0, `scenario_count` 8, `test_count` 18, `bug_count` 0, and exits 0. The second exits non-zero. `git status -- artifacts` shows no new file after the second command. `rg` over the four node functions shows no `ollama` and no `11434`.
+The first command prints JSON with `health` No open bugs, `health_band` No open bugs, `mapped_count` 0, `scenario_count` 8, `test_count` 18, `bug_count` 0, `none_count` 8, and exits 0. It does not print `rag` Red. The second exits non-zero. `git status -- artifacts` shows no new file after the second command. `rg` over the four node functions shows no `ollama` and no `11434`.
 
 The subcommand may be named `score` until slice 16 adds `generate`. What matters is the four-node order and the two exits.
 

@@ -17,7 +17,7 @@ The health rubric and the output schema are a **stable prefix**. The only bytes 
 
 | Part | Contains | Changes per story? |
 | --- | --- | --- |
-| Prefix | Rubric in force (the kept H-rows and the published RAG rule), the output schema (`headline`, `sections[]`, `actions[]`), and the writer rules in `docs/orchestration-and-cost.md` §4.2 | No |
+| Prefix | Rubric in force (the kept H-rows and the story-health stand-in), the output schema (`headline`, `sections[]`, `actions[]`), and the writer rules in `docs/orchestration-and-cost.md` §4.2 | No |
 | Suffix | Score object for this story id. One AC-gap quote only when a specific gap needs it | Yes |
 
 The prefix carries no story id, AC text, test id, bug id, or count. Those live in the suffix.
@@ -110,7 +110,7 @@ Isolation is for **retrieval** when a fixture’s score object no longer fits in
 | Full test-step text | Yes, and only as retrieval. At most one quote per gap reaches the writer. | Counts by type, mapped test ids, unmapped AC ids |
 | Long bug discussion | Yes, as retrieval | Severity, status, age, linked test id, open Sev1 flag |
 | A later AC-prose edit | Yes, as a second call under the reversal test | AC ids, testable flag, ambiguity flags, gap labels |
-| RAG, headline, action list | No | The published RAG and the counts it was computed from |
+| Story health, headline, action list | No | The SR-2 story health and the counts it was computed from |
 
 ### 3.2 Rules that survive a reversal
 

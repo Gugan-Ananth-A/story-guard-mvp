@@ -117,8 +117,6 @@ def test_score_stand_in_text_is_labeled():
         in text
     )
     assert "An empty list covers nothing." in text
-    assert (
-        "When the story has one or more description scenarios and the mapped count is 0, "
-        "the overall RAG is Red."
-    ) in text
-    assert "SR-2 is why 121213 is Red." in text
+    assert "Story health is the highest open bug priority." in text
+    assert "SR-2 is why 121213 is No open bugs." in text
+    assert "The row does not say \"partially covered\"." in text

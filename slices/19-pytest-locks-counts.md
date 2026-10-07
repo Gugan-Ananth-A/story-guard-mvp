@@ -19,8 +19,10 @@ This is the regression lock for the demo. A later edit that “helpfully” maps
   - test count 18
   - mapped count 0
   - bug count 0
-  - RAG `Red`
-  - rule id `SR-2`
+  - open bug count 0
+  - none count 8
+  - story health `No open bugs`
+  - rule ids `SR-1`, `SR-2`, and `SR-3`
 - The test fails when any scenario is covered. Assert `covered` is false on every scenario, and assert the union of mapped test ids is empty.
 - The test fails when `bug_count` is anything other than 0.
 - The test does not call Ollama, Azure DevOps, or the PDF renderer.
