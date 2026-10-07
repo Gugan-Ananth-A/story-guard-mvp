@@ -5,9 +5,6 @@
 .env.*
 !.env.example
 
-# Generated reports
-artifacts/
-
 # Python cache and virtual environments
 __pycache__/
 *.py[cod]
