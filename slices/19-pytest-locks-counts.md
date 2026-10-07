@@ -3,7 +3,7 @@
 **Owner:** Gugan (S5)
 **Depends on:** [09](09-score-121213.md), [18](18-expected-counts.md)
 **Size:** S
-**Status:** Not started
+**Status:** Done (7 Oct 2026)
 
 ## Outcome
 

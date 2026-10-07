@@ -8,7 +8,7 @@
 
 This folder is the build plan for that demo. `docs/requirements.md`, `docs/orchestration-and-cost.md`, and `docs/architecture.md` stay the contracts. A slice that needs a fact from those files cites the section. It does not reopen the decision.
 
-Slices 01, 02, 03, 04, 05, 09, 10, 15, 16, and 17 are done. Slices 09 and 10 were reworked on 7 Oct 2026 for the banking-PDF health rule. The rest are not started.
+Slices 01, 02, 03, 04, 05, 09, 10, 15, 16, 17, and 19 are done. Slices 09 and 10 were reworked on 7 Oct 2026 for the banking-PDF health rule. The rest are not started.
 
 ## How to read a card
 
