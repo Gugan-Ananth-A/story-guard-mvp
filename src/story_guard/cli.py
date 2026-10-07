@@ -47,12 +47,11 @@ def _score(story_id: str) -> int:
 
 
 def _generate(story_id: str, live: bool) -> int:
-    if live:
-        print("--live is not wired", file=sys.stderr)
-        return 1
+    from story_guard.ado_client import ADOClientError
+
     try:
-        state = run_generate({"story_id": story_id})
-    except (GateError, ContractError, NarrativeError, RenderError) as exc:
+        state = run_generate({"story_id": story_id, "live": live})
+    except (GateError, ContractError, NarrativeError, RenderError, ADOClientError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
     try:

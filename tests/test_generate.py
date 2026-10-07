@@ -124,15 +124,109 @@ def test_narrative_failure_writes_no_report(tmp_path, monkeypatch, capsys):
     assert "narrative" in captured.err
 
 
-def test_live_flag_exits_before_the_graph(monkeypatch, capsys):
-    def fail(_state):
-        raise AssertionError("graph ran")
+def test_default_generate_never_constructs_ado_client(tmp_path, monkeypatch, capsys):
+    from story_guard.ado_client import ADOClient
 
-    monkeypatch.setattr("story_guard.cli.run_generate", fail)
+    def fail(cls):
+        raise AssertionError("ADO client was constructed")
+
+    monkeypatch.setattr(ADOClient, "from_env", classmethod(fail))
+    monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
+    monkeypatch.setattr("story_guard.graph.request_narrative", _fake_narrative)
+    monkeypatch.setattr("story_guard.cli.record_success", lambda *_args: None)
+
+    assert main(["generate", "--story-id", "121213"]) == 0
+    assert (tmp_path / "121213.md").is_file()
+    capsys.readouterr()
+
+
+def test_live_generate_uses_ado_story_and_fixture_tests(tmp_path, monkeypatch, capsys):
+    import json
+
+    from story_guard import graph
+    from story_guard.ado_client import ADOClient, StoryRecord
+    from story_guard.test_adapter import fetch_tests as read_fixture_tests
+
+    fixture_record = json.loads((ROOT / "fixtures" / "FIX-121213.json").read_text())
+    live_story = StoryRecord(
+        id="121213",
+        title="Live ADO Login Screen",
+        type="User Story",
+        state="New",
+        description=fixture_record["description"],
+        area="StoryGuard",
+        iteration="StoryGuard\\Sprint",
+        raw_ac_text="",
+        acceptance_criteria=[],
+        notes=[],
+    )
+    ado_calls = []
+    test_adapter_calls = []
+
+    class FakeADOClient:
+        def get_story(self, work_item_id):
+            ado_calls.append(work_item_id)
+            return live_story
+
+    def fetch_fixture_tests(story_id):
+        test_adapter_calls.append(story_id)
+        return read_fixture_tests(story_id)
+
+    monkeypatch.setattr(
+        ADOClient,
+        "from_env",
+        classmethod(lambda cls: FakeADOClient()),
+    )
+    monkeypatch.setattr(graph, "fetch_tests", fetch_fixture_tests)
+    monkeypatch.setattr(graph, "artifacts_dir", lambda: tmp_path)
+    monkeypatch.setattr(graph, "request_narrative", _fake_narrative)
+    monkeypatch.setattr("story_guard.cli.record_success", lambda *_args: None)
+
+    assert main(["generate", "--story-id", "121213", "--live"]) == 0
+
+    report = (tmp_path / "121213.md").read_text(encoding="utf-8")
+    assert ado_calls == [121213]
+    assert test_adapter_calls == ["121213"]
+    assert "Title: Live ADO Login Screen" in report
+    assert "Source: ADO dummy project" in report
+    assert "8 acceptance criteria | 0 adequately covered | 0 with gaps | 8 not covered" in report
+    assert "Tests: 18. Mapped: 0. Bugs: 0." in report
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize("error_type", ["not_found", "not_story"])
+def test_live_ado_errors_exit_nonzero_without_report(
+    tmp_path, monkeypatch, capsys, error_type
+):
+    from story_guard.ado_client import (
+        ADOClient,
+        NonStoryWorkItemError,
+        WorkItemNotFoundError,
+    )
+
+    exception = (
+        WorkItemNotFoundError("work item missing")
+        if error_type == "not_found"
+        else NonStoryWorkItemError("work item is not a User Story")
+    )
+
+    class FailedADOClient:
+        def get_story(self, _work_item_id):
+            raise exception
+
+    monkeypatch.setattr(
+        ADOClient,
+        "from_env",
+        classmethod(lambda cls: FailedADOClient()),
+    )
+    monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
+    monkeypatch.setattr("story_guard.graph.request_narrative", _fake_narrative)
+
     assert main(["generate", "--story-id", "121213", "--live"]) == 1
+    assert list(tmp_path.iterdir()) == []
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "not wired" in captured.err
+    assert str(exception) in captured.err
 
 
 def test_generate_path_does_not_name_ado_pat():

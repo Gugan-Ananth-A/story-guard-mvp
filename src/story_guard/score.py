@@ -38,7 +38,7 @@ def score_health(story_record: dict) -> dict:
     return {
         "story_id": str(story_record.get("id", "")),
         "title": story_record.get("title", ""),
-        "source": "fixture",
+        "source": story_record.get("source", "fixture"),
         "ac_field": _ac_field(story_record),
         "scenario_count": len(scenarios),
         "scenarios": rows,
