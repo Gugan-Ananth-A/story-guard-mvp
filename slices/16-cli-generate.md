@@ -3,7 +3,7 @@
 **Owner:** Gugan (S5)
 **Depends on:** [10](10-graph-through-score.md), [12](12-dummy-test-adapter.md), [14](14-pdf-from-sample-score.md), [15](15-one-narrative-call.md)
 **Size:** M
-**Status:** Not started
+**Status:** Done (7 Oct 2026)
 
 ## Outcome
 
