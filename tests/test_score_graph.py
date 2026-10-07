@@ -69,12 +69,15 @@ def test_score_contract_rejects_title_prefix_as_type():
 def test_score_command_prints_json(capsys):
     assert main(["score", "--story-id", "121213"]) == 0
     score = json.loads(capsys.readouterr().out)
-    assert score["rag"] == "Red"
-    assert score["rule_id"] == "SR-2"
+    assert score["health"] == "No open bugs"
+    assert score["health_band"] == "No open bugs"
+    assert score["rule_ids"] == ["SR-1", "SR-2", "SR-3"]
+    assert "rag" not in score
     assert score["mapped_count"] == 0
     assert score["scenario_count"] == 8
     assert score["test_count"] == 18
     assert score["bug_count"] == 0
+    assert score["none_count"] == 8
     assert score["ac_field"] == "empty"
 
 

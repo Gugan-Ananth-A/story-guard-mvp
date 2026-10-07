@@ -8,7 +8,7 @@
 
 This folder is the build plan for that demo. `docs/requirements.md`, `docs/orchestration-and-cost.md`, and `docs/architecture.md` stay the contracts. A slice that needs a fact from those files cites the section. It does not reopen the decision.
 
-Slices 01, 02, 03, 04, and 05 are done. Slices 09 and 10 landed on 30 Sep 2026 against the old Red rule and are in rework for the banking-PDF health rule. The rest are not started.
+Slices 01, 02, 03, 04, 05, 09, and 10 are done. Slices 09 and 10 were reworked on 7 Oct 2026 for the banking-PDF health rule. The rest are not started.
 
 ## How to read a card
 
@@ -45,8 +45,8 @@ Sizes are planning weight for a 4-hour day. S fits beside another slice. M is mo
 | 06 | [PDF library (D8)](06-pdf-library-d8.md) | Valliammai | S6 | — | S | Yes |
 | 07 | [Six section headings](07-section-headings.md) | Valliammai | S6 | — | S | Yes |
 | 08 | [Rubric prefix, first cut](08-rubric-prefix-start.md) | Valliammai | S4 | — | S | Yes |
-| 09 | [Score 121213](09-score-121213.md) | Gugan | S5 | 01, 04, 05 | M | Yes — rework |
-| 10 | [Graph through score](10-graph-through-score.md) | Gugan | S5 | 03, 09 | S | Yes — rework |
+| 09 | [Score 121213](09-score-121213.md) | Gugan | S5 | 01, 04, 05 | M | Yes |
+| 10 | [Graph through score](10-graph-through-score.md) | Gugan | S5 | 03, 09 | S | Yes |
 | 11 | [ADO client](11-ado-client.md) | Thabitha | S2 | 01, 04 | M | Drop candidate |
 | 12 | [Dummy test adapter](12-dummy-test-adapter.md) | Thabitha | S3 | 04, 05 | S | Yes |
 | 13 | [Prefix ready to send](13-rubric-prefix-sendable.md) | Valliammai | S4 | 08 | S | Yes |
