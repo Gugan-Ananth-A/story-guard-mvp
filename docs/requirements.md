@@ -1,7 +1,7 @@
 # User Story Health Agent — Requirements Pack (Phase 1)
 
 **Status:** Freeze draft (Gugan) — 29 Sep 2026  
-**Revision:** 29 Sep 2026 — dummy story **121213** recorded in §6.2. D6/D10 and the 8 GB local runtime (D7) are proposed-locked in `docs/orchestration-and-cost.md`. Rubric-cache, tool-schema, and context-isolation constraints are in `docs/architecture.md` (not built this week). PDF library stays open.  
+**Revision:** 29 Sep 2026 — dummy story **121213** recorded in §6.2. D6/D10 and the 8 GB local runtime (D7) are proposed-locked in `docs/orchestration-and-cost.md`. Rubric-cache, tool-schema, and context-isolation constraints are in `docs/architecture.md` (not built this week). PDF library D8 is locked in `docs/pdf-library.md`.
 **Sprint window this pack covers:** Week 2 planning (25–28 Aug 2026) + close-out  
 **Repo:** https://github.com/Gugan-Ananth-A/story-guard-mvp  
 **Companion workbook:** `Story Guard - Week 2 - User Stories & Setup.xlsx`  
@@ -9,7 +9,7 @@
 **Dummy-data rule:** no live team project, no production agent loop this pack.
 
 This document freezes the problem, users, phase-1 boundary, data sources, scorecard *intent*, generation gates, and phase map.  
-D6 (orchestrator), D10 (single pipeline), and the development runtime (D7: local model on an 8 GB Mac) are a **proposed lock** in `docs/orchestration-and-cost.md`. PDF library (D8) stays TBD (TBD-ARCH-2).
+D6 (orchestrator), D10 (single pipeline), and the development runtime (D7: local model on an 8 GB Mac) are a **proposed lock** in `docs/orchestration-and-cost.md`. PDF library D8 is locked in `docs/pdf-library.md` (TBD-ARCH-2).
 
 ---
 
@@ -371,7 +371,7 @@ File naming: `fixtures/FIX-HEALTHY.json` etc. Include a `story_id` that matches 
 
 Phase 1 output is a PDF. QA reviews markdown first if the renderer is markdown → PDF.
 
-Intended section order (from scorecard + consumer walkthrough; outline not frozen):
+Frozen section order for this sprint (from the scorecard + consumer walkthrough):
 
 1. Title block — story id, title, generated-at, source (“dummy fixture” vs “ADO dummy project”)
 2. Overall RAG (or split: coverage health + bug health) + one-line headline
@@ -382,9 +382,11 @@ Intended section order (from scorecard + consumer walkthrough; outline not froze
 7. Recommended actions — 3–7 items with owner role (QA / Dev / PO)
 8. Appendix — raw story / AC / TC / bug IDs so QA can validate against ADO
 
+Each numbered item is one PDF section. The possible RAG split remains within section 2; it does not create another section. The exact template headings are in `templates/health_report.md`.
+
 Static mocks for FIX-HEALTHY and one unhealthy fixture are the UX spec for the build week. They are **not** agent-generated.
 
-**TBD-REPORT-1** (Valliammai + Rithika): freeze the outline.  
+**TBD-REPORT-1** (Valliammai + Rithika): the eight-section order is frozen for this sprint in `templates/health_report.md`; UX critique remains open.
 **TBD-REPORT-2** (Vignesh): QA critique of the mocks — 5 concrete template edits — after the PDFs exist.
 
 ---
@@ -424,7 +426,7 @@ Rules the architecture must obey:
 The Thursday architecture review draft that introduces a Web UI, API gateway, and application database is a **later** shape. It is not phase 1.
 
 **TBD-ARCH-1** (Gugan): D6 and D10 are proposed-locked in `docs/orchestration-and-cost.md`. Remaining action is to paste those decision-log rows into the workbook. Re-open only if §6 of that doc is met.  
-**TBD-ARCH-2** (Valliammai): D7 development runtime is locked in `docs/orchestration-and-cost.md` §4.5. D8 PDF library is still open.  
+**TBD-ARCH-2** (Valliammai): D7 development runtime is locked in `docs/orchestration-and-cost.md` §4.5. D8 PDF library is locked as ReportLab in `docs/pdf-library.md`.
 **TBD-ARCH-3** (Gugan): rubric-cache, tool-schema pruning, and context-isolation constraints are in `docs/architecture.md`. Not implemented this week. A breach is a defect.
 
 ---
@@ -455,7 +457,7 @@ The Thursday architecture review draft that introduces a Web UI, API gateway, an
 | TBD-FIX-2 | Mock-report section order | Valliammai, Rithika | Mock PDFs |
 | TBD-REPORT-1 / 2 | Outline freeze + QA critique | Valliammai, Rithika, Vignesh | PDF template |
 | TBD-ARCH-1 | D6/D10 proposed lock is written. Paste the workbook rows. Do not re-open without the reversal test in `docs/orchestration-and-cost.md` §6. | Gugan | Workbook decision log |
-| TBD-ARCH-2 | D7 dev runtime is locked (local, 8 GB Mac). D8 PDF library is still open. | Valliammai | B6 |
+| TBD-ARCH-2 | D7 dev runtime is locked (local, 8 GB Mac). D8 PDF library is locked as ReportLab in `docs/pdf-library.md`. | Valliammai | B6 |
 | TBD-ARCH-3 | Constraints are in `docs/architecture.md`. Implementation of cache, tool pruning, and isolation waits. | Gugan | None this week |
 | TBD-PLAN-1 | Next-week backlog resized to 1–2 hrs/day | Gugan + all | Monday start |
 | TBD-PLAN-2 | Decision log D5–D10 dated and closed. D6 and D10 are proposed-locked (29 Sep 2026) in `docs/orchestration-and-cost.md`; the workbook copy is still outstanding. | Gugan | Stop relitigating Tuesday |

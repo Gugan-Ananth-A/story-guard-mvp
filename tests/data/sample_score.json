@@ -1,0 +1,144 @@
+{
+  "story": {
+    "id": "SYN-2401",
+    "title": "Update account contact details",
+    "type": "User Story",
+    "state": "Ready"
+  },
+  "source": "Synthetic fixture",
+  "generated_at": "2026-10-05T12:00:00Z",
+  "rag": "Amber",
+  "headline": "Three acceptance criteria do not have explicit test links.",
+  "acceptance_criteria": [
+    {
+      "id": "SYN-AC-001",
+      "text": "A user can update the contact email with a verified address.",
+      "testable": true,
+      "flags": []
+    },
+    {
+      "id": "SYN-AC-002",
+      "text": "The updated email is shown after the profile is reopened.",
+      "testable": true,
+      "flags": []
+    },
+    {
+      "id": "SYN-AC-003",
+      "text": "An invalid email address is rejected with a validation message.",
+      "testable": true,
+      "flags": []
+    },
+    {
+      "id": "SYN-AC-004",
+      "text": "The prior email remains unchanged when verification fails.",
+      "testable": true,
+      "flags": []
+    }
+  ],
+  "test_mappings": [
+    {
+      "ac_id": "SYN-AC-001",
+      "test_ids": ["SYN-TC-001"]
+    },
+    {
+      "ac_id": "SYN-AC-002",
+      "test_ids": []
+    },
+    {
+      "ac_id": "SYN-AC-003",
+      "test_ids": []
+    },
+    {
+      "ac_id": "SYN-AC-004",
+      "test_ids": []
+    }
+  ],
+  "coverage": {
+    "mapped_ac_count": 1,
+    "uncovered_ac_count": 3,
+    "total_tests": 17,
+    "test_coverage_percent": 66,
+    "by_type": {
+      "happy": 7,
+      "negative": 4,
+      "edge": 4,
+      "security": 2
+    }
+  },
+  "test_ids": [
+    "SYN-TC-001",
+    "SYN-TC-002",
+    "SYN-TC-003",
+    "SYN-TC-004",
+    "SYN-TC-005",
+    "SYN-TC-006",
+    "SYN-TC-007",
+    "SYN-TC-008",
+    "SYN-TC-009",
+    "SYN-TC-010",
+    "SYN-TC-011",
+    "SYN-TC-012",
+    "SYN-TC-013",
+    "SYN-TC-014",
+    "SYN-TC-015",
+    "SYN-TC-016",
+    "SYN-TC-017"
+  ],
+  "bugs": {
+    "open_count": 1,
+    "items": [
+      {
+        "id": "SYN-BUG-001",
+        "title": "Verification message is delayed after retry",
+        "severity": "P2",
+        "status": "Active",
+        "age_days": 5,
+        "found_in_env": "Staging",
+        "linked_tc_id": "SYN-TC-009"
+      }
+    ]
+  },
+  "recommended_actions": [
+    {
+      "owner_role": "QA",
+      "text": "Add explicit test links for the three uncovered acceptance criteria."
+    },
+    {
+      "owner_role": "Dev",
+      "text": "Review the active verification-message defect and confirm its fix."
+    },
+    {
+      "owner_role": "PO",
+      "text": "Confirm that the verification-failure behavior matches the intended requirement."
+    }
+  ],
+  "appendix": {
+    "story_ids": ["SYN-2401"],
+    "ac_ids": [
+      "SYN-AC-001",
+      "SYN-AC-002",
+      "SYN-AC-003",
+      "SYN-AC-004"
+    ],
+    "test_ids": [
+      "SYN-TC-001",
+      "SYN-TC-002",
+      "SYN-TC-003",
+      "SYN-TC-004",
+      "SYN-TC-005",
+      "SYN-TC-006",
+      "SYN-TC-007",
+      "SYN-TC-008",
+      "SYN-TC-009",
+      "SYN-TC-010",
+      "SYN-TC-011",
+      "SYN-TC-012",
+      "SYN-TC-013",
+      "SYN-TC-014",
+      "SYN-TC-015",
+      "SYN-TC-016",
+      "SYN-TC-017"
+    ],
+    "bug_ids": ["SYN-BUG-001"]
+  }
+}

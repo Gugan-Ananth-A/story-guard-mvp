@@ -7,7 +7,7 @@ name = "story-guard"
 version = "0.1.0"
 description = "User Story Health Agent, phase 1"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["reportlab>=4.2,<5"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.3"]
