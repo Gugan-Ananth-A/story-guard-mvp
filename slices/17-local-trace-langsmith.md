@@ -3,7 +3,7 @@
 **Owner:** Gugan (S7)
 **Depends on:** [16](16-cli-generate.md)
 **Size:** S
-**Status:** Not started
+**Status:** Done (7 Oct 2026)
 **Slip:** drop this slice first. If any of it remains, keep the `runs.jsonl` line and drop the LangSmith client.
 
 ## Outcome

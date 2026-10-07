@@ -21,3 +21,7 @@ python scripts/ollama_smoke.py
 ```
 
 The smoke script targets `qwen3.5:4b`, sends `num_ctx` 8192 on the request, and prints one JSON object.
+
+## Trace
+
+`LANGSMITH_API_KEY` is optional. The PDF is produced without it. A successful `story-guard generate` appends one line to `artifacts/runs.jsonl` with the story id, the narrative token count, and the narrative latency. When the key is set, that run is also sent to LangSmith. The key is read from the environment. It is not written into the report or the jsonl line.
