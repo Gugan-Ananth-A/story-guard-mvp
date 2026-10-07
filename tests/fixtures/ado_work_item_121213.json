@@ -1,0 +1,13 @@
+{
+  "id": 121213,
+  "fields": {
+    "System.Title": "Login Screen",
+    "System.WorkItemType": "User Story",
+    "System.State": "New",
+    "System.Description": "As a registered user, log in with email and password to access the account.\n\nBackground: The user is on the login page.\n\nScenario: Successful login with valid credentials\nExpected result: Authenticated and redirected to the dashboard / home page\n\nScenario: Empty email field\nExpected result: Login button stays disabled or inactive\n\nScenario: Empty password field\nExpected result: Login button stays disabled or inactive\n\nScenario: Invalid email format (example user@domain)\nExpected result: Inline validation error; user stays on the login page\n\nScenario: Unregistered email, or valid email with the wrong password\nExpected result: Invalid-credentials error; user stays on the page; password field is cleared\n\nScenario: Show / Hide on the password field\nExpected result: Plain text, then masked again\n\nScenario: Forgot Password?\nExpected result: Redirect to the password recovery page\n\nScenario: Either required field empty\nExpected result: Login button stays disabled or inactive",
+    "System.AreaPath": null,
+    "System.IterationPath": null,
+    "Microsoft.VSTS.Common.AcceptanceCriteria": ""
+  },
+  "relations": []
+}
