@@ -5,10 +5,17 @@
 .env.*
 !.env.example
 
+# Generated reports
+artifacts/
+
 # Python cache and virtual environments
 __pycache__/
 *.py[cod]
+*.egg-info/
+.pytest_cache/
 .venv/
+dist/
+build/
 
 # Crash artifacts
 core

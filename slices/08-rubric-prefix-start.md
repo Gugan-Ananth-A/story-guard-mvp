@@ -17,7 +17,7 @@ The prefix is not sent to a model in this slice. Slice 13 makes it sendable. Sli
 - It contains a `rubric_version` string. Use `rubric_v1` unless the file names a different version on the first line, in which case that is the version and the filename follows it. This sprint uses `rubric_v1`.
 - It contains the may / may-not rules from `docs/orchestration-and-cost.md` §4.2, in the model’s voice:
   - The model may write the headline, write short section prose that cites the counts, and phrase 3–7 actions with owner roles (QA / Dev / PO).
-  - The model may not change the RAG, add or drop a test, an AC, or a bug, emit a coverage percentage that is absent from the score object, or populate `mapped_ac`.
+  - The model may not change the story health, rewrite a row's depth, gap, or row status, add or drop a test, an AC, or a bug, emit a coverage percentage that is absent from the score object, write "partially covered", or populate `mapped_ac`.
 - It contains the output schema the runner will require: `headline`, `sections`, `actions`. `sections` is an array. `actions` is an array of 3–7 items with an owner role.
 - No sentence is about a particular story. The file has no story id, no story title, no AC text, no test id, and no count from 121213.
 

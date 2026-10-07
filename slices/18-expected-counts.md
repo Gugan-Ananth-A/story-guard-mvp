@@ -22,10 +22,13 @@ The numbers are the ones `score_health` emits for this fixture. If the page and 
 | Tests | 18 |
 | Mapped | 0 |
 | Bugs | 0 |
-| RAG | Red |
-| Rule ids | SR-1 and SR-2 |
+| Open bugs | 0 |
+| Escaped bugs | 0 |
+| Adequate / Partial / None | 0 / 0 / 8 |
+| Story health | No open bugs |
+| Rule ids | SR-1, SR-2, and SR-3 |
 
-- The page says SR-2 is the rule that sets Red, and that SR-1 is the rule that an empty `mapped_ac_ids` covers nothing.
+- The page says SR-2 is the rule that sets No open bugs, SR-1 is the rule that an empty `mapped_ac_ids` covers nothing, and SR-3 is the rule that sets all eight rows to None.
 - The page points at `fixtures/FIX-121213.json` and at `docs/rag-stand-in.md`.
 - The page says the button-disabled contradiction is a note and is not a mapping.
 - The page does not tell the reader to sign in to Azure DevOps to verify these counts.
@@ -37,7 +40,7 @@ Write the markdown page. Keep it to a single screen. Slice 19’s test asserts t
 ## Check
 
 ```bash
-rg -n "empty|8|18|Red|SR-1|SR-2" fixtures/FIX-121213.md
+rg -n "empty|8|18|No open bugs|SR-1|SR-2|SR-3" fixtures/FIX-121213.md
 ```
 
 A reader can find each row of the table. The file mentions mapped 0 and bugs 0 explicitly, not only as a subtraction the reader has to do.

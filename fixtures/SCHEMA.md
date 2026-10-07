@@ -1,71 +1,41 @@
 # Fixture schema
 
-This file is the canonical field contract for fixture records. Field names use `snake_case` throughout. Record shapes align with `docs/requirements.md` §6.3.
+Naming law for this sprint. Story, test, and bug records use one spelling. The scorer, the ADO mapper, and the dummy adapter use these keys.
+
+The AC field and the description scenarios are different fields. On story 121213 the AC field is empty and the scenarios live in the description (`docs/requirements.md` §6.2, TBD-DATA-1). `acceptance_criteria` is the discrete list from the AC field. `scenarios` is the list split out of the description. Both lists use AcceptanceCriterion. They are not aliases of each other.
+
+A new scenario starts on a line whose first non-space text is `Scenario:`. The 121213 sample yields eight blocks.
+
+Records match `docs/requirements.md` §6.3.
 
 ## StoryRecord
 
-| Field | Meaning |
-| --- | --- |
-| `id` | Stable story identifier |
-| `title` | Story title |
-| `type` | Work-item type |
-| `state` | Current story state |
-| `description` | Story description |
-| `area` | Area path or equivalent; `null` when omitted from a sanitized fixture |
-| `iteration` | Iteration path or equivalent; `null` when omitted from a sanitized fixture |
-| `raw_ac_text` | Original acceptance-criteria text from the source |
-| `acceptance_criteria` | Discrete `AcceptanceCriterion` records for this story |
-| `notes` | Story-level source observations; these do not create test-to-criterion links |
+Keys: `id`, `title`, `type`, `state`, `description`, `area`, `iteration`, `acceptance_criteria_raw`, `acceptance_criteria`, `scenarios`, `note`.
+
+`type` for a story this sprint scores is `User Story`.
 
 ## AcceptanceCriterion
 
-| Field | Meaning |
-| --- | --- |
-| `ac_id` | Stable criterion identifier within the story |
-| `text` | Criterion text |
-| `testable` | Whether the criterion has a pass/fail outcome |
-| `ambiguity_flags` | Explicit ambiguity findings; empty when none are recorded |
+Keys: `ac_id`, `text`, `testable`, `flags`.
+
+`ac_id` is a pack label such as `AC-1`. It is not a field on the work item.
 
 ## TestCase
 
-| Field | Meaning |
-| --- | --- |
-| `id` | Stable test-case identifier |
-| `title` | Test-case title |
-| `type` | One of `happy`, `negative`, `edge`, `security`, or `adhoc` when known; `null` when the fixture does not record a classification |
-| `mapped_ac_ids` | Explicitly linked acceptance-criterion identifiers; an empty list means no criteria are linked |
-| `last_result` | Most recent execution result, when available |
-| `last_result_at` | Timestamp of the most recent execution result, when available |
-| `linked_bug_ids` | Identifiers of bugs linked to this test case |
+Keys: `id`, `title`, `type`, `mapped_ac_ids`, `last_result`, `last_result_at`, `linked_bug_ids`.
 
-## CoverageSummary
+`type` is one of `happy`, `negative`, `edge`, `security`, `adhoc`. An empty string means unset. The author prefix `P` / `N` / `A` on the 121213 titles is not this enum (`docs/requirements.md` §6.2.2). That prefix stays in the title. It is not copied into `type`.
 
-| Field | Meaning |
-| --- | --- |
-| `by_type` | Precomputed test counts by coverage type |
-| `mapped_count` | Precomputed count of mapped tests |
-| `unmapped_count` | Precomputed count of unmapped tests |
-
-Coverage values are fixture data. The evaluation layer reads them; it does not infer or recompute them from narrative text.
+`mapped_ac_ids` is an array of `ac_id` strings. An empty array is a real value. It means the test maps to no `ac_id` (`docs/requirements.md` §6.4).
 
 ## BugRecord
 
-| Field | Meaning |
-| --- | --- |
-| `id` | Stable bug identifier |
-| `title` | Bug title |
-| `severity` | Bug severity |
-| `priority` | Bug priority |
-| `status` | Current bug status |
-| `age` | Bug age as represented by the source fixture |
-| `found_in_env` | Environment where the bug was found |
-| `linked_story_id` | Identifier of the linked story |
-| `linked_tc_id` | Identifier of the linked test case, when present |
+Keys: `id`, `title`, `severity`, `priority`, `status`, `age`, `found_in`, `linked_story_id`, `linked_tc_id`, `assigned_to`, `application`, `created`.
 
-## HealthReport
+`priority` is `P1`, `P2`, `P3`, or `P4` when the source has it. The scorer does not copy `severity` into `priority`.
 
-The report record contains `story_header`, `rag`, `per_signal_scores`, `narrative`, `recommended_actions`, and `appendix_raw_ids`.
+`assigned_to`, `application`, and `created` may be an empty string. The bug table in `docs/requirements.md` §10 prints a blank cell for an empty string. Story 121213 has no bug rows, so those three keys are unused on that file. A bug record that omits them still matches this sprint's contract. When the key is present it is a string.
 
-## Traceability
+## Fixture file
 
-A test is linked to an acceptance criterion only when its `mapped_ac_ids` explicitly contains that criterion's `ac_id`. Missing links remain missing; they are never inferred from titles or text. This follows `docs/requirements.md` §6.4.
+`fixtures/FIX-121213.json` is one StoryRecord plus `tests` (an array of TestCase) and `bugs` (an array of BugRecord).

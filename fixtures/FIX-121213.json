@@ -1,186 +1,227 @@
 {
-  "story": {
-    "id": "121213",
-    "title": "Login Screen",
-    "type": "User Story",
-    "state": "New",
-    "description": "As a registered user, log in with email and password to access the account.\n\nBackground: The user is on the login page.\n\nScenario: Successful login with valid credentials\nExpected result: Authenticated and redirected to the dashboard / home page\n\nScenario: Empty email field\nExpected result: Login button stays disabled or inactive\n\nScenario: Empty password field\nExpected result: Login button stays disabled or inactive\n\nScenario: Invalid email format (example user@domain)\nExpected result: Inline validation error; user stays on the login page\n\nScenario: Unregistered email, or valid email with the wrong password\nExpected result: Invalid-credentials error; user stays on the page; password field is cleared\n\nScenario: Show / Hide on the password field\nExpected result: Plain text, then masked again\n\nScenario: Forgot Password?\nExpected result: Redirect to the password recovery page\n\nScenario: Either required field empty\nExpected result: Login button stays disabled or inactive",
-    "area": null,
-    "iteration": null,
-    "raw_ac_text": "",
-    "acceptance_criteria": [],
-    "notes": [
-      "AC-2, AC-3, and AC-8 say Login stays disabled or inactive when a required field is empty, while tests 121217, 121218, and 121219 expect clicking Login to show validation errors. Preserve this contradiction as a story note; do not infer any test-to-criterion links."
-    ]
-  },
+  "id": "121213",
+  "title": "SNAP Login Screen",
+  "type": "User Story",
+  "state": "New",
+  "description": "As a registered user, log in with email and password to reach the SNAP account.\nBackground: the user is on the \"Login to SNAPS\" page.\n\nScenario: Successful login with valid credentials\nExpected: Authenticated and redirected to the SNAP dashboard / home page\n\nScenario: Empty email field\nExpected: Login button stays disabled or inactive\n\nScenario: Empty password field\nExpected: Login button stays disabled or inactive\n\nScenario: Invalid email format\nExpected: Inline validation error; user stays on the login page\n\nScenario: Unregistered email, or valid email with the wrong password\nExpected: Invalid-credentials error; user stays on the page; password field is cleared\n\nScenario: Show / Hide on the password field\nExpected: Plain text, then masked again\n\nScenario: Forgot Password?\nExpected: Redirect to the password recovery page\n\nScenario: Either required field empty\nExpected: Login button stays disabled or inactive\n",
+  "area": "Ecom MVP",
+  "iteration": "Ecom MVP\\Ecom phase 2.1 release\\Story Guard - AI Agent",
+  "acceptance_criteria_raw": "",
+  "acceptance_criteria": [],
+  "scenarios": [
+    {
+      "ac_id": "AC-1",
+      "text": "Successful login with valid credentials. Authenticated and redirected to the SNAP dashboard / home page",
+      "testable": true,
+      "flags": []
+    },
+    {
+      "ac_id": "AC-2",
+      "text": "Empty email field. Login button stays disabled or inactive",
+      "testable": true,
+      "flags": []
+    },
+    {
+      "ac_id": "AC-3",
+      "text": "Empty password field. Login button stays disabled or inactive",
+      "testable": true,
+      "flags": []
+    },
+    {
+      "ac_id": "AC-4",
+      "text": "Invalid email format. Inline validation error; user stays on the login page",
+      "testable": true,
+      "flags": []
+    },
+    {
+      "ac_id": "AC-5",
+      "text": "Unregistered email, or valid email with the wrong password. Invalid-credentials error; user stays on the page; password field is cleared",
+      "testable": true,
+      "flags": []
+    },
+    {
+      "ac_id": "AC-6",
+      "text": "Show / Hide on the password field. Plain text, then masked again",
+      "testable": true,
+      "flags": []
+    },
+    {
+      "ac_id": "AC-7",
+      "text": "Forgot Password?. Redirect to the password recovery page",
+      "testable": true,
+      "flags": []
+    },
+    {
+      "ac_id": "AC-8",
+      "text": "Either required field empty. Login button stays disabled or inactive",
+      "testable": true,
+      "flags": []
+    }
+  ],
+  "note": "AC-2, AC-3, and AC-8 say the Login button stays disabled when a required field is empty. Tests 121217, 121218, and 121219 say the tester clicks Login and sees inline validation. This note records that contradiction. It is not a mapping.",
   "tests": [
     {
       "id": "121216",
       "title": "[AUTH-102065-P01] Verify successful login with valid registered email and correct password",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121217",
       "title": "[AUTH-102065-P02] Verify validation error when email field is left empty",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121218",
       "title": "[AUTH-102065-P03] Verify validation error when password field is left empty",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121219",
       "title": "[AUTH-102065-P04] Verify validation errors when both email and password fields are empty",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121220",
       "title": "[AUTH-102065-P05] Verify validation error for incorrectly formatted email",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121221",
       "title": "[AUTH-102065-P06] Verify error message for unregistered email",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121222",
       "title": "[AUTH-102065-P07] Verify error message and field reset for incorrect password",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121223",
       "title": "[AUTH-102065-P08] Verify password field is masked by default",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121224",
       "title": "[AUTH-102065-P09] Verify 'Show' toggle reveals the entered password",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121225",
       "title": "[AUTH-102065-P10] Verify 'Hide' toggle re-masks the password",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121226",
       "title": "[AUTH-102065-P11] Verify 'Login' button remains disabled when required fields are empty",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121227",
       "title": "[AUTH-102065-P12] Verify 'Login' button becomes active once valid inputs are entered",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121228",
       "title": "[AUTH-102065-P13] Verify navigation to the Forgot Password flow",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121229",
       "title": "[AUTH-102065-P14] Verify leading/trailing spaces in the email field are handled correctly",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121230",
       "title": "[AUTH-102065-P15] Verify email field accepts case-insensitive match for login",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121231",
       "title": "[AUTH-102065-N01] Verify system handles malicious input (SQL/script injection) in the email field",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121232",
       "title": "[AUTH-102065-N02] Verify session persists after successful login on page refresh",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     },
     {
       "id": "121233",
       "title": "[AUTH-102065-A01] Verify all UI elements are displayed correctly on the login page",
-      "type": null,
+      "type": "",
       "mapped_ac_ids": [],
-      "last_result": null,
+      "last_result": "",
       "last_result_at": null,
       "linked_bug_ids": []
     }
   ],
-  "coverage": {
-    "by_type": {},
-    "mapped_count": 0,
-    "unmapped_count": 18
-  },
   "bugs": []
 }

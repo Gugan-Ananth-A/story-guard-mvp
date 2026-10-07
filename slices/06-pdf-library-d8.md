@@ -39,4 +39,4 @@ The note names ReportLab (or the single library the author locked, if a same-day
 
 ## Out of this slice
 
-The eight headings, the template, and a rendered file. Those are slices 07 and 14. Pixel-perfect layout is out (`docs/requirements.md` §4).
+The six headings, the template, and a rendered file. Those are slices 07 and 14. Pixel-perfect layout is out (`docs/requirements.md` §4). Charts from the banking PDF are out with it.

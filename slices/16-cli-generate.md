@@ -20,7 +20,7 @@ gate_input → fetch → validate_contract → score_health → write_narrative 
 ## Done when
 
 - `story-guard generate --story-id 121213` exits 0.
-- It writes `artifacts/121213.md` with the eight headings.
+- It writes `artifacts/121213.md` with the six headings.
 - The default invocation does not pass `--live` and does not read `ADO_PAT`. A missing PAT still completes this default command.
 - `scripts/demo.sh` runs that default command and nothing else. The script’s text has no `--live`.
 - A bad story id exits non-zero and does not create `artifacts/121213.md`.
@@ -43,7 +43,7 @@ rg -n "live" scripts/demo.sh
 story-guard generate --story-id 999999 ; echo exit:$?
 ```
 
-The first command exits 0. The markdown file exists and contains the eight headings. `scripts/demo.sh` does not contain `--live`. The bad id exits non-zero and does not leave `artifacts/999999.md`.
+The first command exits 0. The markdown file exists and contains the six headings. `scripts/demo.sh` does not contain `--live`. The bad id exits non-zero and does not leave `artifacts/999999.md`.
 
 ## Out of this slice
 

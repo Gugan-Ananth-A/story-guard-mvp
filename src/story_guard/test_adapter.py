@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 
 FIXTURE_STORY_ID = "121213"
 FIXTURE_PATH = (
-    Path(__file__).resolve().parent.parent
+    Path(__file__).resolve().parents[2]
     / "fixtures"
     / "FIX-121213.json"
 )
