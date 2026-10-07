@@ -15,8 +15,8 @@
 
 - The prefix file still has `rubric_version`, the output schema (`headline`, `sections`, `actions`), and the §4.2 rules.
 - The rules that this call depends on are explicit in the file, in words the model is given:
-  - Cite the counts on the score object.
-  - Do not invent coverage. Do not populate `mapped_ac`. Do not emit a percentage that the score object does not already contain.
+  - Cite the counts on the score object, including the story health and the Adequate / Partial / None counts.
+  - Do not invent coverage. Do not populate `mapped_ac`. Do not emit a percentage that the score object does not already contain. Do not change the story health. Do not write "partially covered".
 - A unit test reads the file, hashes the bytes, reads the file again, and asserts the two hashes are equal.
 - The hashed bytes are the file contents. The test does not format the prefix with a story id, a title, or a count before hashing.
 - A search of the file still finds no `121213`, no `SNAP`, and no test id.

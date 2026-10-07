@@ -1,12 +1,22 @@
 .DS_Store
-.env
-artifacts/
 
-.venv/
+# Environment secrets and local overrides
+.env
+.env.*
+!.env.example
+
+# Python cache and virtual environments
 __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+.venv/
 dist/
 build/
 
+# Crash artifacts
+core
+core.*
+*.heapsnapshot
+report.*.json
+isolate-*.log

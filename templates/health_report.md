@@ -37,3 +37,26 @@ Raw story IDs: {{ raw_story_ids }}
 Raw AC IDs: {{ raw_ac_ids }}  
 Raw test IDs: {{ raw_test_ids }}  
 Raw bug IDs: {{ raw_bug_ids }}
+# Title block
+
+{{title_block}}
+
+# Story health
+
+{{story_health}}
+
+# Acceptance criteria vs test coverage
+
+{{coverage}}
+
+# Bug details
+
+{{bugs}}
+
+# Recommended actions
+
+{{actions}}
+
+# Appendix
+
+{{appendix}}

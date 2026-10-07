@@ -3,7 +3,7 @@
 **Owner:** Gugan (S5)
 **Depends on:** [03](03-langgraph-path.md), [09](09-score-121213.md)
 **Size:** S
-**Status:** Not started
+**Status:** Done (7 Oct 2026). The four-node path landed 30 Sep 2026. The score check below is the 7 Oct 2026 health rule.
 
 ## Outcome
 
@@ -39,7 +39,7 @@ story-guard score --story-id 121213
 story-guard score --story-id 999999 ; echo exit:$?
 ```
 
-The first command prints JSON with `rag` Red, `mapped_count` 0, `scenario_count` 8, `test_count` 18, `bug_count` 0, and exits 0. The second exits non-zero. `git status -- artifacts` shows no new file after the second command. `rg` over the four node functions shows no `ollama` and no `11434`.
+The first command prints the slice 09 score object and exits 0. The locked fields are `health` No open bugs, `health_band` No open bugs, `rule_ids` SR-1, SR-2, and SR-3, `ac_field` empty, `mapped_count` 0, `scenario_count` 8, `test_count` 18, `bug_count` 0, and `none_count` 8. The object has no `rag` field. The second command exits non-zero. `git status -- artifacts` shows no new file after either command. `rg` over the four node functions shows no `ollama` and no `11434`.
 
 The subcommand may be named `score` until slice 16 adds `generate`. What matters is the four-node order and the two exits.
 

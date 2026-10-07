@@ -120,10 +120,10 @@ Include:
 
 - story id, title, type, state
 - discrete AC list with testable / flags already computed
-- per-AC linked test ids and gap labels already computed
-- coverage-by-type counts already computed
-- bug list with severity, status, age, linked TC already computed
-- overall RAG **already decided by the published rule**
+- per-AC linked test ids, depth, gap, and row status already computed
+- coverage counts already computed (Adequate, Partial, None). No coverage percentage unless the score object already contains one
+- bug list with priority, severity, status, found-in, linked TC, and the other §10 columns already computed
+- story health **already decided by SR-2**
 - recommended-action *slots* the writer may phrase, not invent
 
 Exclude:
@@ -141,9 +141,10 @@ The model may:
 
 The model may not:
 
-- change the RAG
+- change the story health
 - add or drop a test, AC, or bug
 - emit a coverage percentage that is not on the score object
+- rewrite a row's depth, gap, or row status, including the words "partially covered"
 - populate `mapped_ac`
 
 If the writer disagrees with a count, that is a scorer bug or a fixture bug — not a prompt tweak.
