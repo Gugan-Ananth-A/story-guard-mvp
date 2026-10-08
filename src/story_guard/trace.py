@@ -1,6 +1,7 @@
 """Local run line, and a LangSmith trace only when the key is set."""
 
 import json
+import hashlib
 import os
 import sys
 import urllib.error
@@ -12,10 +13,14 @@ from pathlib import Path
 
 def record_success(story_id: str, token_count: int, narrative_latency_ms: int) -> None:
     """Append one jsonl line. A missing LangSmith key does not raise."""
+    from story_guard.prefix import load_prefix
+
+    prefix_bytes = load_prefix().encode("utf-8")
     line = {
         "story_id": story_id,
         "token_count": int(token_count),
         "narrative_latency_ms": int(narrative_latency_ms),
+        "prefix_sha256": hashlib.sha256(prefix_bytes).hexdigest(),
     }
     _append_jsonl(runs_path(), line)
     _maybe_trace(line)

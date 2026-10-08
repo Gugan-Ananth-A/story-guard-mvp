@@ -1,6 +1,7 @@
 # User Story Health Agent — Requirements Pack (Phase 1)
 
 **Status:** Freeze draft (Gugan) — 29 Sep 2026  
+**Revision:** 29 Sep 2026 — dummy story **121213** recorded in §6.2. D6/D10 and the 8 GB local runtime (D7) are proposed-locked in `docs/orchestration-and-cost.md`. Rubric-cache, tool-schema, and context-isolation constraints are in `docs/architecture.md` (not built this week). PDF library D8 is locked in `docs/pdf-library.md`.
 **Revision:** 7 Oct 2026 — phase 1 takes the single-story parts of `Story_Guard_Report_2_Banking.pdf` (Desktop). Story health follows that PDF’s highest-open-bug rule. Coverage is a separate table. The portfolio pages, the charts, and the coverage percentages stay later. The 29 Sep 2026 revision still stands: dummy story **121213** is recorded in §6.2. D6/D10 and the 8 GB local runtime (D7) are proposed-locked in `docs/orchestration-and-cost.md`. Rubric-cache, tool-schema, and context-isolation constraints are in `docs/architecture.md` (not built this week). PDF library stays open.  
 **Sprint window this pack covers:** Week 2 planning (25–28 Aug 2026) + close-out  
 **Repo:** https://github.com/Gugan-Ananth-A/story-guard-mvp  
@@ -9,7 +10,7 @@
 **Dummy-data rule:** no live team project, no production agent loop this pack.
 
 This document freezes the problem, users, phase-1 boundary, data sources, scorecard *intent*, generation gates, and phase map.  
-D6 (orchestrator), D10 (single pipeline), and the development runtime (D7: local model on an 8 GB Mac) are a **proposed lock** in `docs/orchestration-and-cost.md`. PDF library (D8) stays TBD (TBD-ARCH-2).
+D6 (orchestrator), D10 (single pipeline), and the development runtime (D7: local model on an 8 GB Mac) are a **proposed lock** in `docs/orchestration-and-cost.md`. PDF library D8 is locked in `docs/pdf-library.md` (TBD-ARCH-2).
 
 ---
 
@@ -392,15 +393,24 @@ File naming: `fixtures/FIX-HEALTHY.json` etc. Include a `story_id` that matches 
 
 Phase 1 output is one PDF for one story. QA reviews markdown first if the renderer is markdown → PDF.
 
-The 121213 demo freezes the six sections below. They are the single-story reading of `Story_Guard_Report_2_Banking.pdf`, plus the two phase-1 jobs that sample does not do: recommended actions (H12) and a raw-id appendix so QA can check Azure DevOps. There is no seventh section. Portfolio summary, the multi-story overview, and the charts are not headings in this template.
+Frozen section order for this sprint (from the scorecard + consumer walkthrough):
+The 121213 demo has these eight sections in this exact order. The RAG is the coverage signal from the score; SR-2 story health is also shown in section 2 and remains independently determined by bugs. There is no ninth section. Portfolio summary, the multi-story overview, and charts are not headings in this template.
 
-1. **Title block** — the document title is Story Health Report. Story id, title, project, generated-at, and source (`dummy fixture` or `ADO dummy project`). One line for the reader: user story health, test coverage, and defect status.
-2. **Story health** — the §7.1 word and band, the rule key (Critical / High / Medium / Low, and the No open bugs line), open counts for P1–P4, and the escaped count. Coverage is not restated here as a second health color.
-3. **Acceptance criteria vs test coverage** — one count line and one table. The count line is `N acceptance criteria | A adequately covered | G with gaps | U not covered`. On 121213 the rows are the eight description scenarios, and the line says the AC field is empty. Columns are AC ID, Coverage depth, and Coverage gap. The color key is three words the text extract must contain: Adequate, Partial, None. A green, amber, or red fill may sit behind those words. Depth uses the sample’s phrases for types that are present: “Positive scenarios are covered”, “Negative scenarios are covered”, “Adhoc scenarios are covered”. A missing type uses “No Positive scenarios Covered”, “No Negative scenarios Covered”, or “No Adhoc scenarios Covered”. None uses depth `None` and gap `No coverage`. The scorer does not write “partially covered”.
-4. **Bug details** — the sample’s columns, for this story, including bugs that are not open. Sort by priority, P1 first. The section still renders when `bugs` is empty, and it says there are no bugs. Not-open rows are marked not open. Production and UAT are marked escaped.
-5. **Recommended actions** — 3–7 items with an owner role (QA / Dev / PO). The narrative phrases them from the score. It does not invent a gap the score did not record.
-6. **Appendix** — raw story, AC, test, and bug ids so QA can validate against the source.
+1. **Title block** — Story Health Report, story id, title, project, generated-at, and source (`dummy fixture` or `ADO dummy project`).
+2. **Overall RAG** — coverage RAG, SR-1 / SR-2 / SR-3 stand-in labels, SR-2 story health and band, and the narrative headline.
+3. **AC review** — whether the AC field is empty or present, plus the discrete description scenarios.
+4. **AC ↔ test mapping** — each scenario, explicitly linked test ids, and gaps. No inferred mapping.
+5. **Coverage by type** — counts from the score object and the `N acceptance criteria | A adequately covered | G with gaps | U not covered` count line. Include the Adequate, Partial, and None color-key labels. Do not invent a percentage.
+6. **Bugs** — bug details by priority, severity, age, linked test, and found-in environment. The section and its column names remain when the bug list is empty.
+7. **Recommended actions** — 3–7 items with an owner role (QA / Dev / PO), phrased from score facts.
+8. **Appendix** — raw story, AC, test, and bug ids so QA can validate against the source.
 
+Each numbered item is one PDF section. RAG and story health remain within section 2; they do not create additional headings. The exact template headings are in `templates/health_report.md`.
+
+Static mocks for FIX-HEALTHY and one unhealthy fixture are the UX spec for the build week. They are **not** agent-generated.
+
+**TBD-REPORT-1** (Valliammai + Rithika): the eight-section order is frozen for this sprint in `templates/health_report.md`; UX critique remains open.
+**TBD-REPORT-2** (Vignesh): QA critique of the mocks — 5 concrete template edits — after the PDFs exist.
 Row status, computed with the mapping law in §6.4:
 
 - **Adequate** — the scenario’s mapped tests include Positive, Negative, and Adhoc.
@@ -411,7 +421,7 @@ Row status, computed with the mapping law in §6.4:
 
 Static mocks for FIX-HEALTHY and one unhealthy fixture remain the later UX spec. They are not this sprint’s demo, and they are not agent-generated.
 
-**TBD-REPORT-1** (Valliammai + Rithika): the six headings above are the 121213 freeze. A portfolio outline is still open.  
+**TBD-REPORT-1** (Valliammai + Rithika): the eight headings above are the 121213 freeze. A portfolio outline is still open.
 **TBD-REPORT-2** (Vignesh): QA critique of the mocks — 5 concrete template edits — after a PDF exists. The critique can accept or reject the stand-in in §7.1.
 
 ---
@@ -451,7 +461,7 @@ Rules the architecture must obey:
 The Thursday architecture review draft that introduces a Web UI, API gateway, and application database is a **later** shape. It is not phase 1.
 
 **TBD-ARCH-1** (Gugan): D6 and D10 are proposed-locked in `docs/orchestration-and-cost.md`. Remaining action is to paste those decision-log rows into the workbook. Re-open only if §6 of that doc is met.  
-**TBD-ARCH-2** (Valliammai): D7 development runtime is locked in `docs/orchestration-and-cost.md` §4.5. D8 PDF library is still open.  
+**TBD-ARCH-2** (Valliammai): D7 development runtime is locked in `docs/orchestration-and-cost.md` §4.5. D8 PDF library is locked as ReportLab in `docs/pdf-library.md`.
 **TBD-ARCH-3** (Gugan): rubric-cache, tool-schema pruning, and context-isolation constraints are in `docs/architecture.md`. Not implemented this week. A breach is a defect.
 
 ---
@@ -482,7 +492,7 @@ The Thursday architecture review draft that introduces a Web UI, API gateway, an
 | TBD-FIX-2 | Portfolio and five-persona mock outline. The 121213 section order is frozen in §10. | Valliammai, Rithika | Later mock PDFs |
 | TBD-REPORT-1 / 2 | 121213 outline is frozen (§10). QA critique of the rendered PDF is still open. | Valliammai, Rithika, Vignesh | PDF template |
 | TBD-ARCH-1 | D6/D10 proposed lock is written. Paste the workbook rows. Do not re-open without the reversal test in `docs/orchestration-and-cost.md` §6. | Gugan | Workbook decision log |
-| TBD-ARCH-2 | D7 dev runtime is locked (local, 8 GB Mac). D8 PDF library is still open. | Valliammai | B6 |
+| TBD-ARCH-2 | D7 dev runtime is locked (local, 8 GB Mac). D8 PDF library is locked as ReportLab in `docs/pdf-library.md`. | Valliammai | B6 |
 | TBD-ARCH-3 | Constraints are in `docs/architecture.md`. Implementation of cache, tool pruning, and isolation waits. | Gugan | None this week |
 | TBD-PLAN-1 | Next-week backlog resized to 1–2 hrs/day | Gugan + all | Monday start |
 | TBD-PLAN-2 | Decision log D5–D10 dated and closed. D6 and D10 are proposed-locked (29 Sep 2026) in `docs/orchestration-and-cost.md`; the workbook copy is still outstanding. | Gugan | Stop relitigating Tuesday |
