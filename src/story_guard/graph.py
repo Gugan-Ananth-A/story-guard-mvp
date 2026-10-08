@@ -71,6 +71,7 @@ _ACCEPTED_STORY_ID = "121213"
 
 class GraphState(TypedDict, total=False):
     story_id: str
+    live: bool
     record: dict
     score: dict
     narrative: dict
@@ -101,8 +102,11 @@ def gate_input(state: GraphState) -> dict:
         raise GateError("story id is not numeric")
     if story_id != _ACCEPTED_STORY_ID:
         raise GateError(f"story id {story_id} is not in the fixture")
+    live = state.get("live", False)
+    if not isinstance(live, bool):
+        raise GateError("live flag must be a boolean")
     validate_template(_template_path())
-    return {"story_id": story_id}
+    return {"story_id": story_id, "live": live}
 
 
 def fetch(state: GraphState) -> dict:
@@ -112,18 +116,82 @@ def fetch(state: GraphState) -> dict:
     except OSError as exc:
         raise ContractError("fixture FIX-121213.json is missing") from exc
     try:
-        record = json.loads(text)
+        fixture_record = json.loads(text)
     except json.JSONDecodeError as exc:
         raise ContractError("fixture FIX-121213.json is not valid JSON") from exc
+
     story_id = state.get("story_id")
     if not isinstance(story_id, str) or story_id.strip() == "":
-        story_id = str(record.get("id") or "")
+        story_id = str(fixture_record.get("id") or "")
+
+    if state.get("live", False):
+        from story_guard.ado_client import ADOClient
+
+        story = ADOClient.from_env().get_story(int(story_id)).to_dict()
+        record = _story_record_from_ado(story, fixture_record)
+    else:
+        record = fixture_record
+
     try:
         adapter_rows = fetch_tests(story_id)
     except DummyTestAdapterError as exc:
         raise ContractError(str(exc)) from exc
     record["tests"] = _tests_from_adapter(record.get("tests"), adapter_rows)
     return {"record": record}
+
+
+def _story_record_from_ado(story: dict, fixture_record: dict) -> dict:
+    """Replace fixture story fields with ADO fields while keeping fixture test data."""
+    record = dict(fixture_record)
+    description = story.get("description") or ""
+    record.update(
+        {
+            "id": story["id"],
+            "title": story["title"],
+            "type": story["type"],
+            "state": story["state"],
+            "description": description,
+            "area": story.get("area") or "",
+            "iteration": story.get("iteration") or "",
+            "acceptance_criteria_raw": story.get("raw_ac_text") or "",
+            "acceptance_criteria": story.get("acceptance_criteria") or [],
+            "scenarios": _scenarios_from_description(description),
+            "source": "ADO dummy project",
+        }
+    )
+    return record
+
+
+def _scenarios_from_description(description: str) -> list[dict]:
+    scenarios = []
+    title = None
+    expected_lines = []
+
+    def append_scenario() -> None:
+        if not title:
+            return
+        expected = " ".join(expected_lines)
+        text = f"{title}. {expected}" if expected else title
+        scenarios.append(
+            {
+                "ac_id": f"AC-{len(scenarios) + 1}",
+                "text": text,
+                "testable": bool(expected),
+                "flags": [],
+            }
+        )
+
+    for raw_line in description.splitlines():
+        line = raw_line.strip()
+        if line.startswith("Scenario:"):
+            append_scenario()
+            title = line.removeprefix("Scenario:").strip()
+            expected_lines = []
+        elif title and line.startswith(("Expected:", "Expected result:")):
+            expected_lines.append(line.partition(":")[2].strip())
+
+    append_scenario()
+    return scenarios
 
 
 def _tests_from_adapter(fixture_tests: object, adapter_rows: list) -> list:
