@@ -1,0 +1,1318 @@
+%PDF-1.4
+%“Œ‹ž ReportLab Generated PDF document (opensource)
+1 0 obj
+<<
+/F1 2 0 R /F2 3 0 R /F3 4 0 R
+>>
+endobj
+2 0 obj
+<<
+/BaseFont /Helvetica /Encoding /WinAnsiEncoding /Name /F1 /Subtype /Type1 /Type /Font
+>>
+endobj
+3 0 obj
+<<
+/BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding /Name /F2 /Subtype /Type1 /Type /Font
+>>
+endobj
+4 0 obj
+<<
+/BaseFont /Symbol /Name /F3 /Subtype /Type1 /Type /Font
+>>
+endobj
+5 0 obj
+<<
+/Contents 10 0 R /MediaBox [ 0 0 612 792 ] /Parent 9 0 R /Resources <<
+/Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
+>> /Rotate 0 /Trans <<
+
+>> 
+  /Type /Page
+>>
+endobj
+6 0 obj
+<<
+/Contents 11 0 R /MediaBox [ 0 0 612 792 ] /Parent 9 0 R /Resources <<
+/Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
+>> /Rotate 0 /Trans <<
+
+>> 
+  /Type /Page
+>>
+endobj
+7 0 obj
+<<
+/PageMode /UseNone /Pages 9 0 R /Type /Catalog
+>>
+endobj
+8 0 obj
+<<
+/Author (\(anonymous\)) /CreationDate (D:20000101000000+00'00') /Creator (\(unspecified\)) /Keywords () /ModDate (D:20000101000000+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+  /Subject (\(unspecified\)) /Title (SNAP Login Screen) /Trapped /False
+>>
+endobj
+9 0 obj
+<<
+/Count 2 /Kids [ 5 0 R 6 0 R ] /Type /Pages
+>>
+endobj
+10 0 obj
+<<
+/Length 13687
+>>
+stream
+1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
+q
+.796078 .823529 .862745 RG
+.5 w
+n 46.8 27.36 m 565.2 27.36 l S
+BT /F1 7 Tf 8.4 TL ET
+.407843 .458824 .529412 rg
+BT 1 0 0 1 46.8 16.56 Tm (Story Health Report | Fixture analysis) Tj T* ET
+BT 1 0 0 1 543.017 16.56 Tm (Page 1) Tj T* ET
+Q
+q
+1 0 0 1 59.4 701.44 cm
+q
+.12549 .231373 .364706 rg
+n 0 50 493.2 -50 re f*
+0 0 0 rg
+BT /F1 10 Tf 12 TL ET
+q
+1 0 0 1 10 13 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 3 Tm /F2 21 Tf 24 TL (Story Health Report) Tj T* ET
+Q
+Q
+q
+1 0 0 1 274 10 cm
+q
+BT 1 0 0 1 0 23 Tm 143.463 0 Td 10 TL /F2 7 Tf 1 1 1 rg (SNAP Login Screen) Tj /F1 7 Tf  T* -29.456 0 Td (Story 121213  ) Tj (|) Tj (  dummy fixture) Tj  T* 23.604 0 Td (2026-10-08 08:24 UTC) Tj T* -137.611 0 Td ET
+Q
+Q
+q
+Q
+Q
+Q
+q
+1 0 0 1 52.8 696.44 cm
+Q
+q
+1 0 0 1 52.8 681.24 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.4 Tm /F1 7.8 Tf 9.2 TL (User story health, test coverage, and defect status.) Tj T* ET
+Q
+Q
+q
+1 0 0 1 59.76 619.74 cm
+q
+.94902 .956863 .968627 rg
+n 0 59.5 492.48 -59.5 re f*
+0 0 0 rg
+BT /F1 10 Tf 12 TL ET
+q
+1 0 0 1 6 28 cm
+q
+.14902 .239216 .356863 rg
+BT 1 0 0 1 0 2 Tm /F2 15 Tf 17 TL 30.87 0 Td (8) Tj T* -30.87 0 Td ET
+Q
+Q
+q
+1 0 0 1 88.08 28 cm
+q
+.14902 .239216 .356863 rg
+BT 1 0 0 1 0 2 Tm /F2 15 Tf 17 TL 26.7 0 Td (18) Tj T* -26.7 0 Td ET
+Q
+Q
+q
+1 0 0 1 170.16 28 cm
+q
+.14902 .239216 .356863 rg
+BT 1 0 0 1 0 2 Tm /F2 15 Tf 17 TL 30.87 0 Td (0) Tj T* -30.87 0 Td ET
+Q
+Q
+q
+1 0 0 1 252.24 28 cm
+q
+.14902 .239216 .356863 rg
+BT 1 0 0 1 0 2 Tm /F2 15 Tf 17 TL 30.87 0 Td (0) Tj T* -30.87 0 Td ET
+Q
+Q
+q
+1 0 0 1 334.32 28 cm
+q
+.14902 .239216 .356863 rg
+BT 1 0 0 1 0 2 Tm /F2 15 Tf 17 TL 20.8725 0 Td (Red) Tj T* -20.8725 0 Td ET
+Q
+Q
+q
+1 0 0 1 416.4 19.5 cm
+q
+.14902 .239216 .356863 rg
+BT 1 0 0 1 0 19 Tm /F2 15 Tf 17 TL 5.04 0 Td (No open) Tj T* 12.0825 0 Td (bugs) Tj T* -17.1225 0 Td ET
+Q
+Q
+q
+1 0 0 1 6 5 cm
+q
+.294118 .337255 .396078 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL 14.425 0 Td (SCENARIOS) Tj T* -14.425 0 Td ET
+Q
+Q
+q
+1 0 0 1 88.08 5 cm
+q
+.294118 .337255 .396078 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL 23.7595 0 Td (TESTS) Tj T* -23.7595 0 Td ET
+Q
+Q
+q
+1 0 0 1 170.16 5 cm
+q
+.294118 .337255 .396078 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL 20.2595 0 Td (MAPPED) Tj T* -20.2595 0 Td ET
+Q
+Q
+q
+1 0 0 1 252.24 5 cm
+q
+.294118 .337255 .396078 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL 25.121 0 Td (BUGS) Tj T* -25.121 0 Td ET
+Q
+Q
+q
+1 0 0 1 334.32 5 cm
+q
+.294118 .337255 .396078 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL 6.6445 0 Td (COVERAGE RAG) Tj T* -6.6445 0 Td ET
+Q
+Q
+q
+1 0 0 1 416.4 5 cm
+q
+.294118 .337255 .396078 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL 8.202 0 Td (STORY HEALTH) Tj T* -8.202 0 Td ET
+Q
+Q
+q
+1 J
+1 j
+.32549 .533333 .721569 RG
+2.2 w
+n 0 59.5 m 82.08 59.5 l S
+.207843 .478431 .541176 RG
+n 82.08 59.5 m 164.16 59.5 l S
+.85098 .603922 .156863 RG
+n 164.16 59.5 m 246.24 59.5 l S
+.85098 .329412 .301961 RG
+n 246.24 59.5 m 328.32 59.5 l S
+.85098 .278431 .270588 RG
+n 328.32 59.5 m 410.4 59.5 l S
+.223529 .607843 .384314 RG
+n 410.4 59.5 m 492.48 59.5 l S
+.827451 .847059 .87451 RG
+.35 w
+n 0 59.5 m 492.48 59.5 l S
+n 0 0 m 492.48 0 l S
+n 0 0 m 0 59.5 l S
+n 492.48 0 m 492.48 59.5 l S
+n 0 16.5 m 492.48 16.5 l S
+n 82.08 0 m 82.08 59.5 l S
+n 164.16 0 m 164.16 59.5 l S
+n 246.24 0 m 246.24 59.5 l S
+n 328.32 0 m 328.32 59.5 l S
+n 410.4 0 m 410.4 59.5 l S
+Q
+Q
+Q
+q
+1 0 0 1 52.8 601.74 cm
+q
+.14902 .239216 .356863 rg
+BT 1 0 0 1 0 2 Tm /F2 11 Tf 13 TL (Title block) Tj T* ET
+Q
+Q
+q
+1 0 0 1 52.8 586.54 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.4 Tm /F1 7.8 Tf 9.2 TL (Project: Ecom MVP) Tj T* ET
+Q
+Q
+q
+1 0 0 1 52.8 568.54 cm
+q
+.14902 .239216 .356863 rg
+BT 1 0 0 1 0 2 Tm /F2 11 Tf 13 TL (Overall RAG) Tj T* ET
+Q
+Q
+q
+1 0 0 1 59.4 533.14 cm
+q
+.85098 .278431 .270588 rg
+n 0 32.4 68.4 -32.4 re f*
+.94902 .956863 .968627 rg
+n 68.4 32.4 424.8 -32.4 re f*
+0 0 0 rg
+BT /F1 10 Tf 12 TL ET
+q
+1 0 0 1 8 11.6 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 -3.8 Tm /F2 13 Tf 9.2 TL (Red) Tj T* ET
+Q
+Q
+q
+1 0 0 1 76.4 7 cm
+q
+BT 1 0 0 1 0 10.6 Tm 9.2 TL /F2 7.8 Tf .14902 .215686 .27451 rg (Story health:) Tj /F1 7.8 Tf ( No open bugs  ) Tj (  ) Tj /F2 7.8 Tf (Rules:) Tj /F1 7.8 Tf ( SR-1, SR-2, SR-3) Tj  T* (Coverage gaps require QA review.) Tj T* ET
+Q
+Q
+q
+1 J
+1 j
+.796078 .823529 .862745 RG
+.5 w
+n 0 32.4 m 493.2 32.4 l S
+n 0 0 m 493.2 0 l S
+n 0 0 m 0 32.4 l S
+n 493.2 0 m 493.2 32.4 l S
+Q
+Q
+Q
+q
+1 0 0 1 52.8 517.94 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.4 Tm /F1 7.8 Tf 9.2 TL (Coverage: Review the explicit mapping results on the score.) Tj T* ET
+Q
+Q
+q
+1 0 0 1 52.8 511.94 cm
+Q
+q
+1 0 0 1 52.8 488.94 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 10 Tm /F1 7 Tf 8.5 TL (Fixture note: AC-2, AC-3, and AC-8 say the Login button stays disabled when a required field is empty. Tests 121217, 121218, and 121219 say the tester clicks) Tj T* (Login and sees inline validation. This note records that contradiction. It is not a mapping.) Tj T* ET
+Q
+Q
+q
+1 0 0 1 52.8 470.94 cm
+q
+.14902 .239216 .356863 rg
+BT 1 0 0 1 0 2 Tm /F2 11 Tf 13 TL (AC review) Tj T* ET
+Q
+Q
+q
+1 0 0 1 52.8 372.94 cm
+q
+BT 1 0 0 1 0 84.2 Tm 9.2 TL /F1 7.8 Tf .14902 .215686 .27451 rg (The AC field is empty.) Tj  T* (Scenarios: 8) Tj  T* (AC-1: Successful login with valid credentials. Authenticated and redirected to the SNAP dashboard / home page) Tj  T* (AC-2: Empty email field. Login button stays disabled or inactive) Tj  T* (AC-3: Empty password field. Login button stays disabled or inactive) Tj  T* (AC-4: Invalid email format. Inline validation error; user stays on the login page) Tj  T* (AC-5: Unregistered email, or valid email with the wrong password. Invalid-credentials error; user stays on the page; password field is cleared) Tj  T* (AC-6: Show / Hide on the password field. Plain text, then masked again) Tj  T* (AC-7: Forgot Password?. Redirect to the password recovery page) Tj  T* (AC-8: Either required field empty. Login button stays disabled or inactive) Tj T* ET
+Q
+Q
+q
+1 0 0 1 52.8 224.44 cm
+q
+.160784 .278431 .396078 rg
+n 0 146.5 493.2 -22 re f*
+.945098 .956863 .968627 rg
+n 0 110 493.2 -14.5 re f*
+.945098 .956863 .968627 rg
+n 0 81 493.2 -14.5 re f*
+.945098 .956863 .968627 rg
+n 0 43.5 493.2 -14.5 re f*
+.945098 .956863 .968627 rg
+n 0 14.5 493.2 -14.5 re f*
+1 1 1 rg
+BT /F1 10 Tf 12 TL ET
+q
+1 0 0 1 4 135.5 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 .8 Tm /F2 7.2 Tf 8 TL (AC ID) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 135.5 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 .8 Tm /F2 7.2 Tf 8 TL (Acceptance scenario) Tj T* ET
+Q
+Q
+q
+1 0 0 1 461.2 127.5 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 8.8 Tm /F2 7.2 Tf 8 TL (Testabl) Tj T* (e) Tj T* ET
+Q
+Q
+0 0 0 rg
+q
+1 0 0 1 4 113 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 113 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Successful login with valid credentials. Authenticated and redirected to the SNAP dashboard / home page) Tj T* ET
+Q
+Q
+q
+1 0 0 1 461.2 113 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Yes) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 98.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 98.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Empty email field. Login button stays disabled or inactive) Tj T* ET
+Q
+Q
+q
+1 0 0 1 461.2 98.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Yes) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 84 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-3) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 84 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Empty password field. Login button stays disabled or inactive) Tj T* ET
+Q
+Q
+q
+1 0 0 1 461.2 84 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Yes) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 69.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-4) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 69.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Invalid email format. Inline validation error; user stays on the login page) Tj T* ET
+Q
+Q
+q
+1 0 0 1 461.2 69.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Yes) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 55 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-5) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 46.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 10 Tm /F1 7 Tf 8.5 TL (Unregistered email, or valid email with the wrong password. Invalid-credentials error; user stays on the page; password field is) Tj T* (cleared) Tj T* ET
+Q
+Q
+q
+1 0 0 1 461.2 55 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Yes) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 32 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-6) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 32 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Show / Hide on the password field. Plain text, then masked again) Tj T* ET
+Q
+Q
+q
+1 0 0 1 461.2 32 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Yes) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 17.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-7) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 17.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Forgot Password?. Redirect to the password recovery page) Tj T* ET
+Q
+Q
+q
+1 0 0 1 461.2 17.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Yes) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 3 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-8) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 3 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Either required field empty. Login button stays disabled or inactive) Tj T* ET
+Q
+Q
+q
+1 0 0 1 461.2 3 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Yes) Tj T* ET
+Q
+Q
+q
+1 J
+1 j
+.796078 .823529 .862745 RG
+.35 w
+n 0 146.5 m 493.2 146.5 l S
+n 0 0 m 493.2 0 l S
+n 0 0 m 0 146.5 l S
+n 493.2 0 m 493.2 146.5 l S
+n 0 124.5 m 493.2 124.5 l S
+n 0 110 m 493.2 110 l S
+n 0 95.5 m 493.2 95.5 l S
+n 0 81 m 493.2 81 l S
+n 0 66.5 m 493.2 66.5 l S
+n 0 43.5 m 493.2 43.5 l S
+n 0 29 m 493.2 29 l S
+n 0 14.5 m 493.2 14.5 l S
+n 50.4 0 m 50.4 146.5 l S
+n 457.2 0 m 457.2 146.5 l S
+Q
+Q
+Q
+q
+1 0 0 1 52.8 206.44 cm
+q
+.14902 .239216 .356863 rg
+BT 1 0 0 1 0 2 Tm /F2 11 Tf 13 TL (AC ) Tj /F3 11 Tf 13 TL (\253) Tj /F2 11 Tf 13 TL ( test mapping) Tj T* ET
+Q
+Q
+q
+1 0 0 1 52.8 73.44 cm
+q
+.160784 .278431 .396078 rg
+n 0 130 493.2 -14 re f*
+.945098 .956863 .968627 rg
+n 0 101.5 493.2 -14.5 re f*
+.945098 .956863 .968627 rg
+n 0 72.5 493.2 -14.5 re f*
+.945098 .956863 .968627 rg
+n 0 43.5 493.2 -14.5 re f*
+.945098 .956863 .968627 rg
+n 0 14.5 493.2 -14.5 re f*
+1 1 1 rg
+BT /F1 10 Tf 12 TL ET
+q
+1 0 0 1 4 119 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 .8 Tm /F2 7.2 Tf 8 TL (AC ID) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 119 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 .8 Tm /F2 7.2 Tf 8 TL (Explicit test IDs) Tj T* ET
+Q
+Q
+q
+1 0 0 1 209.2 119 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 .8 Tm /F2 7.2 Tf 8 TL (Gap) Tj T* ET
+Q
+Q
+0 0 0 rg
+q
+1 0 0 1 4 104.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 104.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (None) Tj T* ET
+Q
+Q
+q
+1 0 0 1 209.2 104.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (No coverage) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 90 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 90 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (None) Tj T* ET
+Q
+Q
+q
+1 0 0 1 209.2 90 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (No coverage) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 75.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-3) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 75.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (None) Tj T* ET
+Q
+Q
+q
+1 0 0 1 209.2 75.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (No coverage) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 61 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-4) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 61 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (None) Tj T* ET
+Q
+Q
+q
+1 0 0 1 209.2 61 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (No coverage) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 46.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-5) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 46.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (None) Tj T* ET
+Q
+Q
+q
+1 0 0 1 209.2 46.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (No coverage) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 32 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-6) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 32 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (None) Tj T* ET
+Q
+Q
+q
+1 0 0 1 209.2 32 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (No coverage) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 17.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-7) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 17.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (None) Tj T* ET
+Q
+Q
+q
+1 0 0 1 209.2 17.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (No coverage) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 3 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-8) Tj T* ET
+Q
+Q
+q
+1 0 0 1 54.4 3 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (None) Tj T* ET
+Q
+Q
+q
+1 0 0 1 209.2 3 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (No coverage) Tj T* ET
+Q
+Q
+q
+1 J
+1 j
+.796078 .823529 .862745 RG
+.35 w
+n 0 130 m 493.2 130 l S
+n 0 0 m 493.2 0 l S
+n 0 0 m 0 130 l S
+n 493.2 0 m 493.2 130 l S
+n 0 116 m 493.2 116 l S
+n 0 101.5 m 493.2 101.5 l S
+n 0 87 m 493.2 87 l S
+n 0 72.5 m 493.2 72.5 l S
+n 0 58 m 493.2 58 l S
+n 0 43.5 m 493.2 43.5 l S
+n 0 29 m 493.2 29 l S
+n 0 14.5 m 493.2 14.5 l S
+n 50.4 0 m 50.4 130 l S
+n 205.2 0 m 205.2 130 l S
+Q
+Q
+Q
+ 
+endstream
+endobj
+11 0 obj
+<<
+/Length 8031
+>>
+stream
+1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
+q
+.796078 .823529 .862745 RG
+.5 w
+n 46.8 27.36 m 565.2 27.36 l S
+BT /F1 7 Tf 8.4 TL ET
+.407843 .458824 .529412 rg
+BT 1 0 0 1 46.8 16.56 Tm (Story Health Report | Fixture analysis) Tj T* ET
+BT 1 0 0 1 543.017 16.56 Tm (Page 2) Tj T* ET
+Q
+q
+1 0 0 1 52.8 738.44 cm
+q
+.14902 .239216 .356863 rg
+BT 1 0 0 1 0 2 Tm /F2 11 Tf 13 TL (Coverage by type) Tj T* ET
+Q
+Q
+q
+1 0 0 1 52.8 723.24 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.4 Tm /F1 7.8 Tf 9.2 TL (Total tests: 18 | Mapped ACs: 0 | Bugs: 0) Tj T* ET
+Q
+Q
+q
+1 0 0 1 59.4 612.24 cm
+q
+.94902 .956863 .968627 rg
+n 327.6 109 165.6 -109 re f*
+0 0 0 rg
+BT /F1 10 Tf 12 TL ET
+q
+1 0 0 1 6 5 cm
+q
+.160784 .278431 .396078 rg
+n 0 101 309.6 -14 re f*
+.945098 .956863 .968627 rg
+n 0 72.5 309.6 -14.5 re f*
+.945098 .956863 .968627 rg
+n 0 43.5 309.6 -14.5 re f*
+.945098 .956863 .968627 rg
+n 0 14.5 309.6 -14.5 re f*
+1 1 1 rg
+BT /F1 10 Tf 12 TL ET
+q
+1 0 0 1 4 90 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 .8 Tm /F2 7.2 Tf 8 TL (Type) Tj T* ET
+Q
+Q
+q
+1 0 0 1 227.2 90 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 .8 Tm /F2 7.2 Tf 8 TL (Count) Tj T* ET
+Q
+Q
+0 0 0 rg
+q
+1 0 0 1 4 75.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Positive) Tj T* ET
+Q
+Q
+q
+1 0 0 1 227.2 75.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (0) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 61 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Negative) Tj T* ET
+Q
+Q
+q
+1 0 0 1 227.2 61 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (0) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 46.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Edge) Tj T* ET
+Q
+Q
+q
+1 0 0 1 227.2 46.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (0) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 32 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Security) Tj T* ET
+Q
+Q
+q
+1 0 0 1 227.2 32 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (0) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 17.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Adhoc) Tj T* ET
+Q
+Q
+q
+1 0 0 1 227.2 17.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (0) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 3 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Unset) Tj T* ET
+Q
+Q
+q
+1 0 0 1 227.2 3 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (18) Tj T* ET
+Q
+Q
+q
+1 J
+1 j
+.796078 .823529 .862745 RG
+.35 w
+n 0 101 m 309.6 101 l S
+n 0 0 m 309.6 0 l S
+n 0 0 m 0 101 l S
+n 309.6 0 m 309.6 101 l S
+n 0 87 m 309.6 87 l S
+n 0 72.5 m 309.6 72.5 l S
+n 0 58 m 309.6 58 l S
+n 0 43.5 m 309.6 43.5 l S
+n 0 29 m 309.6 29 l S
+n 0 14.5 m 309.6 14.5 l S
+n 223.2 0 m 223.2 101 l S
+Q
+Q
+Q
+q
+1 0 0 1 337.6 3 cm
+q
+BT 1 0 0 1 0 90.2 Tm 14 TL /F2 7.8 Tf .14902 .215686 .27451 rg (8 acceptance criteria) Tj /F1 7.8 Tf  T* (0 adequately covered) Tj  T* (0 with gaps) Tj  T* (8 not covered) Tj  T*  T* (Adequate: 0; Partial: 0; None: 8) Tj  T* (Color key: Adequate, Partial, None.) Tj T* ET
+Q
+Q
+q
+1 J
+1 j
+.796078 .823529 .862745 RG
+.5 w
+n 327.6 109 m 493.2 109 l S
+n 327.6 0 m 493.2 0 l S
+n 327.6 0 m 327.6 109 l S
+n 493.2 0 m 493.2 109 l S
+Q
+Q
+Q
+q
+1 0 0 1 52.8 594.24 cm
+q
+.14902 .239216 .356863 rg
+BT 1 0 0 1 0 2 Tm /F2 11 Tf 13 TL (Bugs) Tj T* ET
+Q
+Q
+q
+1 0 0 1 52.8 566.74 cm
+q
+.160784 .278431 .396078 rg
+n 0 24.5 553.68 -12 re f*
+1 1 1 rg
+BT /F1 10 Tf 12 TL ET
+q
+1 0 0 1 3 14.5 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 1.3 Tm /F2 6.7 Tf 8 TL (Bug ID) Tj T* ET
+Q
+Q
+q
+1 0 0 1 42.6 14.5 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 1.3 Tm /F2 6.7 Tf 8 TL (Title) Tj T* ET
+Q
+Q
+q
+1 0 0 1 157.8 14.5 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 1.3 Tm /F2 6.7 Tf 8 TL (State) Tj T* ET
+Q
+Q
+q
+1 0 0 1 202.44 14.5 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 1.3 Tm /F2 6.7 Tf 8 TL (Story ID) Tj T* ET
+Q
+Q
+q
+1 0 0 1 247.8 14.5 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 1.3 Tm /F2 6.7 Tf 8 TL (TC ID) Tj T* ET
+Q
+Q
+q
+1 0 0 1 283.8 14.5 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 1.3 Tm /F2 6.7 Tf 8 TL (Priority) Tj T* ET
+Q
+Q
+q
+1 0 0 1 318.36 14.5 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 1.3 Tm /F2 6.7 Tf 8 TL (Severity) Tj T* ET
+Q
+Q
+q
+1 0 0 1 363 14.5 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 1.3 Tm /F2 6.7 Tf 8 TL (Assigned To) Tj T* ET
+Q
+Q
+q
+1 0 0 1 417 14.5 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 1.3 Tm /F2 6.7 Tf 8 TL (Found in Env) Tj T* ET
+Q
+Q
+q
+1 0 0 1 468.84 14.5 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 1.3 Tm /F2 6.7 Tf 8 TL (Application) Tj T* ET
+Q
+Q
+q
+1 0 0 1 517.08 14.5 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 1.3 Tm /F2 6.7 Tf 8 TL (Created) Tj T* ET
+Q
+Q
+0 0 0 rg
+q
+1 0 0 1 3 2 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (No bugs.) Tj T* ET
+Q
+Q
+q
+1 0 0 1 42.6 10.5 cm
+Q
+q
+1 0 0 1 157.8 10.5 cm
+Q
+q
+1 0 0 1 202.44 10.5 cm
+Q
+q
+1 0 0 1 247.8 10.5 cm
+Q
+q
+1 0 0 1 283.8 10.5 cm
+Q
+q
+1 0 0 1 318.36 10.5 cm
+Q
+q
+1 0 0 1 363 10.5 cm
+Q
+q
+1 0 0 1 417 10.5 cm
+Q
+q
+1 0 0 1 468.84 10.5 cm
+Q
+q
+1 0 0 1 517.08 10.5 cm
+Q
+q
+1 J
+1 j
+.796078 .823529 .862745 RG
+.35 w
+n 0 24.5 m 553.68 24.5 l S
+n 0 0 m 553.68 0 l S
+n 0 0 m 0 24.5 l S
+n 553.68 0 m 553.68 24.5 l S
+n 0 12.5 m 553.68 12.5 l S
+n 39.6 0 m 39.6 24.5 l S
+n 154.8 0 m 154.8 24.5 l S
+n 199.44 0 m 199.44 24.5 l S
+n 244.8 0 m 244.8 24.5 l S
+n 280.8 0 m 280.8 24.5 l S
+n 315.36 0 m 315.36 24.5 l S
+n 360 0 m 360 24.5 l S
+n 414 0 m 414 24.5 l S
+n 465.84 0 m 465.84 24.5 l S
+n 514.08 0 m 514.08 24.5 l S
+Q
+Q
+Q
+q
+1 0 0 1 52.8 548.74 cm
+q
+.14902 .239216 .356863 rg
+BT 1 0 0 1 0 2 Tm /F2 11 Tf 13 TL (Recommended actions) Tj T* ET
+Q
+Q
+q
+1 0 0 1 52.8 488.24 cm
+q
+.160784 .278431 .396078 rg
+n 0 57.5 493.2 -14 re f*
+.945098 .956863 .968627 rg
+n 0 29 493.2 -14.5 re f*
+1 1 1 rg
+BT /F1 10 Tf 12 TL ET
+q
+1 0 0 1 4 46.5 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 .8 Tm /F2 7.2 Tf 8 TL (Owner) Tj T* ET
+Q
+Q
+q
+1 0 0 1 61.6 46.5 cm
+q
+1 1 1 rg
+BT 1 0 0 1 0 .8 Tm /F2 7.2 Tf 8 TL (Action) Tj T* ET
+Q
+Q
+0 0 0 rg
+q
+1 0 0 1 4 32 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (QA) Tj T* ET
+Q
+Q
+q
+1 0 0 1 61.6 32 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Review the scenario mapping gaps.) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 17.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Dev) Tj T* ET
+Q
+Q
+q
+1 0 0 1 61.6 17.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Keep story health based on scored bug facts.) Tj T* ET
+Q
+Q
+q
+1 0 0 1 4 3 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (PO) Tj T* ET
+Q
+Q
+q
+1 0 0 1 61.6 3 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Review the story criteria.) Tj T* ET
+Q
+Q
+q
+1 J
+1 j
+.796078 .823529 .862745 RG
+.35 w
+n 0 57.5 m 493.2 57.5 l S
+n 0 0 m 493.2 0 l S
+n 0 0 m 0 57.5 l S
+n 493.2 0 m 493.2 57.5 l S
+n 0 43.5 m 493.2 43.5 l S
+n 0 29 m 493.2 29 l S
+n 0 14.5 m 493.2 14.5 l S
+n 57.6 0 m 57.6 57.5 l S
+Q
+Q
+Q
+q
+1 0 0 1 52.8 470.24 cm
+q
+.14902 .239216 .356863 rg
+BT 1 0 0 1 0 2 Tm /F2 11 Tf 13 TL (Appendix) Tj T* ET
+Q
+Q
+q
+1 0 0 1 52.8 408.74 cm
+q
+0 0 0 rg
+BT /F1 10 Tf 12 TL ET
+q
+1 0 0 1 3 48 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Story IDs) Tj T* ET
+Q
+Q
+q
+1 0 0 1 67.8 48 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (121213) Tj T* ET
+Q
+Q
+q
+1 0 0 1 3 35.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC IDs) Tj T* ET
+Q
+Q
+q
+1 0 0 1 67.8 35.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8) Tj T* ET
+Q
+Q
+q
+1 0 0 1 3 23 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Test IDs) Tj T* ET
+Q
+Q
+q
+1 0 0 1 67.8 14.5 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 10 Tm /F1 7 Tf 8.5 TL (121216, 121217, 121218, 121219, 121220, 121221, 121222, 121223, 121224, 121225, 121226, 121227, 121228, 121229, 121230,) Tj T* (121231, 121232, 121233) Tj T* ET
+Q
+Q
+q
+1 0 0 1 3 2 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (Bug IDs) Tj T* ET
+Q
+Q
+q
+1 0 0 1 67.8 2 cm
+q
+.14902 .215686 .27451 rg
+BT 1 0 0 1 0 1.5 Tm /F1 7 Tf 8.5 TL (None recorded) Tj T* ET
+Q
+Q
+q
+1 J
+1 j
+.796078 .823529 .862745 RG
+.35 w
+n 0 58.5 m 493.2 58.5 l S
+n 0 0 m 493.2 0 l S
+n 0 0 m 0 58.5 l S
+n 493.2 0 m 493.2 58.5 l S
+n 0 46 m 493.2 46 l S
+n 0 33.5 m 493.2 33.5 l S
+n 0 12.5 m 493.2 12.5 l S
+n 64.8 0 m 64.8 58.5 l S
+Q
+Q
+Q
+ 
+endstream
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000061 00000 n 
+0000000112 00000 n 
+0000000219 00000 n 
+0000000331 00000 n 
+0000000408 00000 n 
+0000000602 00000 n 
+0000000796 00000 n 
+0000000864 00000 n 
+0000001148 00000 n 
+0000001213 00000 n 
+0000014953 00000 n 
+trailer
+<<
+/ID 
+[<48137a42650deb7cf726f653c2351d5d><48137a42650deb7cf726f653c2351d5d>]
+% ReportLab generated PDF document -- digest (opensource)
+
+/Info 8 0 R
+/Root 7 0 R
+/Size 12
+>>
+startxref
+23036
+%%EOF

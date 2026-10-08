@@ -1,23 +1,40 @@
-# Title block
+## Title block
 
-{{title_block}}
+Story Health Report
+Story ID: {{ story_id }}  
+Title: {{ title }}  
+Generated at: {{ generated_at }}  
+Source: {{ source }}
 
-# Story health
+## Overall RAG
 
-{{story_health}}
+{{ overall_rag }}
 
-# Acceptance criteria vs test coverage
+{{ headline }}
 
-{{coverage}}
+## AC review
 
-# Bug details
+{{ ac_review }}
 
-{{bugs}}
+## AC ↔ test mapping
 
-# Recommended actions
+{{ ac_test_mapping }}
 
-{{actions}}
+## Coverage by type
 
-# Appendix
+{{ coverage_by_type }}
 
-{{appendix}}
+## Bugs
+
+{{ bugs }}
+
+## Recommended actions
+
+{{ recommended_actions }}
+
+## Appendix
+
+Raw story IDs: {{ raw_story_ids }}  
+Raw AC IDs: {{ raw_ac_ids }}  
+Raw test IDs: {{ raw_test_ids }}  
+Raw bug IDs: {{ raw_bug_ids }}

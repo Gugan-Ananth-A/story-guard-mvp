@@ -72,7 +72,7 @@ def test_score_command_prints_json(capsys):
     assert score["health"] == "No open bugs"
     assert score["health_band"] == "No open bugs"
     assert score["rule_ids"] == ["SR-1", "SR-2", "SR-3"]
-    assert "rag" not in score
+    assert score["rag"] == "Red"
     assert score["mapped_count"] == 0
     assert score["scenario_count"] == 8
     assert score["test_count"] == 18

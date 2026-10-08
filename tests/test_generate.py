@@ -1,4 +1,4 @@
-"""story-guard generate writes markdown from the fixture. A failed narrative writes nothing."""
+"""story-guard generate writes score-derived Markdown and PDF reports."""
 
 import inspect
 from pathlib import Path
@@ -6,18 +6,20 @@ from pathlib import Path
 import pytest
 
 from story_guard.cli import main
-from story_guard.graph import build_generate_graph, fetch
+from story_guard.graph import build_generate_graph, fetch, run
 from story_guard.narrative import NarrativeError
 from story_guard.render import RenderError, render_markdown
 
 ROOT = Path(__file__).resolve().parents[1]
 HEADINGS = (
-    "# Title block",
-    "# Story health",
-    "# Acceptance criteria vs test coverage",
-    "# Bug details",
-    "# Recommended actions",
-    "# Appendix",
+    "## Title block",
+    "## Overall RAG",
+    "## AC review",
+    "## AC ↔ test mapping",
+    "## Coverage by type",
+    "## Bugs",
+    "## Recommended actions",
+    "## Appendix",
 )
 
 
@@ -56,21 +58,35 @@ def test_generate_graph_order():
     }
 
 
-def test_generate_writes_the_six_headings(tmp_path, monkeypatch, capsys):
+def test_generate_writes_eight_headings_and_score_pdf(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("ADO_PAT", raising=False)
     monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
     monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
     monkeypatch.setattr("story_guard.graph.request_narrative", _fake_narrative)
+    score = run({"story_id": "121213"})["score"]
+    received_scores = []
+    from story_guard.render import render_pdf as actual_render_pdf
+
+    def capture_rendered_score(received, *args, **kwargs):
+        received_scores.append(received)
+        return actual_render_pdf(received, *args, **kwargs)
+
+    monkeypatch.setattr("story_guard.graph.render_pdf_file", capture_rendered_score)
     assert main(["generate", "--story-id", "121213"]) == 0
     report = tmp_path / "121213.md"
+    pdf = tmp_path / "121213.pdf"
     assert report.is_file()
-    assert not (tmp_path / "121213.pdf").exists()
+    assert pdf.is_file() and pdf.stat().st_size > 0
+    assert received_scores == [score]
     text = report.read_text(encoding="utf-8")
-    assert [line for line in text.splitlines() if line.startswith("# ")] == list(HEADINGS)
+    assert [line for line in text.splitlines() if line.startswith("## ")] == list(HEADINGS)
     assert "Story Health Report" in text
     assert "dummy fixture" in text
     assert "The AC field is empty." in text
     assert "No open bugs" in text
+    assert "Overall RAG" in text
+    assert "Red" in text
+    assert "SR-1, SR-2, SR-3" in text
     assert "8 acceptance criteria | 0 adequately covered | 0 with gaps | 8 not covered" in text
     assert "Tests: 18. Mapped: 0. Bugs: 0." in text
     assert "Color key: Adequate, Partial, None." in text
@@ -80,6 +96,37 @@ def test_generate_writes_the_six_headings(tmp_path, monkeypatch, capsys):
     assert "%" not in text
     printed = capsys.readouterr().out.strip()
     assert printed == str(report)
+    pdf_text = pdf.read_bytes()
+    expected_headings = [heading[3:] for heading in HEADINGS]
+    actual_pdf_headings = [
+        heading
+        for heading in expected_headings
+        if heading != "AC ↔ test mapping" and heading.encode("utf-8") in pdf_text
+    ]
+    assert actual_pdf_headings == [
+        heading for heading in expected_headings if heading != "AC ↔ test mapping"
+    ]
+    assert b"AC " in pdf_text and b"test mapping" in pdf_text
+    assert b"The AC field is empty." in pdf_text
+    assert b"SCENARIOS" in pdf_text
+    assert b"COVERAGE RAG" in pdf_text
+    assert b"Story ID" in pdf_text
+    assert b"AC ID" in pdf_text
+    assert b"Test IDs" in pdf_text
+    assert b"Bug IDs" in pdf_text
+    assert f"Scenarios: {score['scenario_count']}".encode() in pdf_text
+    assert f"Total tests: {score['test_count']}".encode() in pdf_text
+    assert f"Mapped ACs: {score['mapped_count']}".encode() in pdf_text
+    assert f"Bugs: {score['bug_count']}".encode() in pdf_text
+    assert score["rag"].encode() in pdf_text
+    assert b"The None count is on the score." in pdf_text
+    assert b"Scenarios: 8" in pdf_text
+    assert b"Total tests: 18" in pdf_text
+    assert b"Mapped ACs: 0" in pdf_text
+    assert b"Bugs: 0" in pdf_text
+    assert b"Red" in pdf_text
+    assert b"SR-1, SR-2, SR-3" in pdf_text
+    assert b"The AC field is empty." in pdf_text
 
 
 def test_score_command_does_not_call_the_model(monkeypatch, capsys):
@@ -122,6 +169,60 @@ def test_narrative_failure_writes_no_report(tmp_path, monkeypatch, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "narrative" in captured.err
+
+
+def test_narrative_count_mismatch_writes_no_artifact(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
+    bad = _fake_narrative
+
+    def wrong_count(score):
+        result = bad(score)
+        result["narrative"]["headline"] = "There are 17 tests and 0 bugs."
+        return result
+
+    monkeypatch.setattr("story_guard.graph.request_narrative", wrong_count)
+    assert main(["generate", "--story-id", "121213"]) == 1
+    assert list(tmp_path.iterdir()) == []
+    assert "test_count" in capsys.readouterr().err
+
+
+def test_narrative_coverage_claim_writes_no_artifact(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
+
+    def covered_ac(score):
+        result = _fake_narrative(score)
+        result["narrative"]["headline"] = "AC-1 is covered."
+        return result
+
+    monkeypatch.setattr("story_guard.graph.request_narrative", covered_ac)
+    assert main(["generate", "--story-id", "121213"]) == 1
+    assert list(tmp_path.iterdir()) == []
+    assert "claims coverage" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("headline", "expected_error"),
+    [
+        ("There are 9 acceptance criteria.", "scenario_count"),
+        ("Mapped ACs: 2.", "mapped_count"),
+        ("Coverage RAG is Green.", "RAG"),
+        ("Story health is Critical.", "story health"),
+    ],
+)
+def test_narrative_score_conflicts_write_no_artifact(
+    tmp_path, monkeypatch, capsys, headline, expected_error
+):
+    monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
+
+    def conflicting_narrative(score):
+        result = _fake_narrative(score)
+        result["narrative"]["headline"] = headline
+        return result
+
+    monkeypatch.setattr("story_guard.graph.request_narrative", conflicting_narrative)
+    assert main(["generate", "--story-id", "121213"]) == 1
+    assert list(tmp_path.iterdir()) == []
+    assert expected_error.lower() in capsys.readouterr().err.lower()
 
 
 def test_default_generate_never_constructs_ado_client(tmp_path, monkeypatch, capsys):

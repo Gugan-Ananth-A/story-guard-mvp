@@ -1,10 +1,12 @@
 """A successful generate records one local line. LangSmith runs only with a key."""
 
+import hashlib
 import json
 
 import pytest
 
 from story_guard.cli import main
+from story_guard.prefix import load_prefix
 from story_guard.trace import _send_trace, record_success
 
 
@@ -57,6 +59,7 @@ def test_empty_key_makes_zero_langsmith_calls(monkeypatch, tmp_path, capsys, key
         "story_id": "121213",
         "token_count": 40,
         "narrative_latency_ms": 12,
+        "prefix_sha256": hashlib.sha256(load_prefix().encode("utf-8")).hexdigest(),
     }
     assert "121213" in (tmp_path / "121213.md").read_text(encoding="utf-8")
     capsys.readouterr()
@@ -76,6 +79,7 @@ def test_set_key_makes_one_langsmith_call(monkeypatch, tmp_path, capsys):
     assert line["story_id"] == "121213"
     assert line["token_count"] == 40
     assert line["narrative_latency_ms"] == 12
+    assert line["prefix_sha256"] == hashlib.sha256(load_prefix().encode("utf-8")).hexdigest()
     saved = (tmp_path / "runs.jsonl").read_text(encoding="utf-8")
     report = (tmp_path / "121213.md").read_text(encoding="utf-8")
     assert "test-key" not in saved
@@ -149,6 +153,16 @@ def test_two_successes_append_two_lines(tmp_path, monkeypatch):
         for row in (tmp_path / "runs.jsonl").read_text(encoding="utf-8").splitlines()
     ]
     assert rows == [
-        {"story_id": "121213", "token_count": 10, "narrative_latency_ms": 20},
-        {"story_id": "121213", "token_count": 11, "narrative_latency_ms": 21},
+        {
+            "story_id": "121213",
+            "token_count": 10,
+            "narrative_latency_ms": 20,
+            "prefix_sha256": hashlib.sha256(load_prefix().encode("utf-8")).hexdigest(),
+        },
+        {
+            "story_id": "121213",
+            "token_count": 11,
+            "narrative_latency_ms": 21,
+            "prefix_sha256": hashlib.sha256(load_prefix().encode("utf-8")).hexdigest(),
+        },
     ]
