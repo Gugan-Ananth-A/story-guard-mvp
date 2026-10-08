@@ -51,6 +51,7 @@ def score_health(story_record: dict) -> dict:
         "adequate_count": sum(1 for row in rows if row["row_status"] == "adequate"),
         "partial_count": sum(1 for row in rows if row["row_status"] == "partial"),
         "none_count": sum(1 for row in rows if row["row_status"] == "none"),
+        "rag": _coverage_rag(rows),
         "bugs": bugs,
         "coverage_by_type": _coverage_by_type(tests),
         "health": health,
@@ -58,6 +59,17 @@ def score_health(story_record: dict) -> dict:
         "rule_ids": list(RULE_IDS),
         "note": note,
     }
+
+
+def _coverage_rag(rows: list[dict]) -> str:
+    """Summarize explicit coverage independently of SR-2 story health."""
+    if not rows:
+        return "Unavailable"
+    if all(row["row_status"] == "none" for row in rows):
+        return "Red"
+    if any(row["row_status"] != "adequate" for row in rows):
+        return "Amber"
+    return "Green"
 
 
 def _ac_field(story_record: dict) -> str:

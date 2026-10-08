@@ -24,6 +24,7 @@ _SCORE_KEYS = {
     "adequate_count",
     "partial_count",
     "none_count",
+    "rag",
     "bugs",
     "coverage_by_type",
     "health",
@@ -69,6 +70,7 @@ def test_score_fixture_counts():
     assert score["adequate_count"] == 0
     assert score["partial_count"] == 0
     assert score["none_count"] == 8
+    assert score["rag"] == "Red"
     assert score["bugs"] == []
     assert score["coverage_by_type"] == {
         "happy": 0,
@@ -81,7 +83,6 @@ def test_score_fixture_counts():
     assert score["health"] == "No open bugs"
     assert score["health_band"] == "No open bugs"
     assert score["rule_ids"] == ["SR-1", "SR-2", "SR-3"]
-    assert "rag" not in score
     assert score["note"] == record["note"]
     scenario_lines = [
         line for line in record["description"].splitlines() if line.lstrip().startswith("Scenario:")

@@ -394,16 +394,18 @@ File naming: `fixtures/FIX-HEALTHY.json` etc. Include a `story_id` that matches 
 Phase 1 output is one PDF for one story. QA reviews markdown first if the renderer is markdown → PDF.
 
 Frozen section order for this sprint (from the scorecard + consumer walkthrough):
-The 121213 demo freezes the six sections below. They are the single-story reading of `Story_Guard_Report_2_Banking.pdf`, plus the two phase-1 jobs that sample does not do: recommended actions (H12) and a raw-id appendix so QA can check Azure DevOps. There is no seventh section. Portfolio summary, the multi-story overview, and the charts are not headings in this template.
+The 121213 demo has these eight sections in this exact order. The RAG is the coverage signal from the score; SR-2 story health is also shown in section 2 and remains independently determined by bugs. There is no ninth section. Portfolio summary, the multi-story overview, and charts are not headings in this template.
 
-1. **Title block** — the document title is Story Health Report. Story id, title, project, generated-at, and source (`dummy fixture` or `ADO dummy project`). One line for the reader: user story health, test coverage, and defect status.
-2. **Story health** — the §7.1 word and band, the rule key (Critical / High / Medium / Low, and the No open bugs line), open counts for P1–P4, and the escaped count. Coverage is not restated here as a second health color.
-3. **Acceptance criteria vs test coverage** — one count line and one table. The count line is `N acceptance criteria | A adequately covered | G with gaps | U not covered`. On 121213 the rows are the eight description scenarios, and the line says the AC field is empty. Columns are AC ID, Coverage depth, and Coverage gap. The color key is three words the text extract must contain: Adequate, Partial, None. A green, amber, or red fill may sit behind those words. Depth uses the sample’s phrases for types that are present: “Positive scenarios are covered”, “Negative scenarios are covered”, “Adhoc scenarios are covered”. A missing type uses “No Positive scenarios Covered”, “No Negative scenarios Covered”, or “No Adhoc scenarios Covered”. None uses depth `None` and gap `No coverage`. The scorer does not write “partially covered”.
-4. **Bug details** — the sample’s columns, for this story, including bugs that are not open. Sort by priority, P1 first. The section still renders when `bugs` is empty, and it says there are no bugs. Not-open rows are marked not open. Production and UAT are marked escaped.
-5. **Recommended actions** — 3–7 items with an owner role (QA / Dev / PO). The narrative phrases them from the score. It does not invent a gap the score did not record.
-6. **Appendix** — raw story, AC, test, and bug ids so QA can validate against the source.
+1. **Title block** — Story Health Report, story id, title, project, generated-at, and source (`dummy fixture` or `ADO dummy project`).
+2. **Overall RAG** — coverage RAG, SR-1 / SR-2 / SR-3 stand-in labels, SR-2 story health and band, and the narrative headline.
+3. **AC review** — whether the AC field is empty or present, plus the discrete description scenarios.
+4. **AC ↔ test mapping** — each scenario, explicitly linked test ids, and gaps. No inferred mapping.
+5. **Coverage by type** — counts from the score object and the `N acceptance criteria | A adequately covered | G with gaps | U not covered` count line. Include the Adequate, Partial, and None color-key labels. Do not invent a percentage.
+6. **Bugs** — bug details by priority, severity, age, linked test, and found-in environment. The section and its column names remain when the bug list is empty.
+7. **Recommended actions** — 3–7 items with an owner role (QA / Dev / PO), phrased from score facts.
+8. **Appendix** — raw story, AC, test, and bug ids so QA can validate against the source.
 
-Each numbered item is one PDF section. The possible RAG split remains within section 2; it does not create another section. The exact template headings are in `templates/health_report.md`.
+Each numbered item is one PDF section. RAG and story health remain within section 2; they do not create additional headings. The exact template headings are in `templates/health_report.md`.
 
 Static mocks for FIX-HEALTHY and one unhealthy fixture are the UX spec for the build week. They are **not** agent-generated.
 
@@ -419,7 +421,7 @@ Row status, computed with the mapping law in §6.4:
 
 Static mocks for FIX-HEALTHY and one unhealthy fixture remain the later UX spec. They are not this sprint’s demo, and they are not agent-generated.
 
-**TBD-REPORT-1** (Valliammai + Rithika): the six headings above are the 121213 freeze. A portfolio outline is still open.  
+**TBD-REPORT-1** (Valliammai + Rithika): the eight headings above are the 121213 freeze. A portfolio outline is still open.
 **TBD-REPORT-2** (Vignesh): QA critique of the mocks — 5 concrete template edits — after a PDF exists. The critique can accept or reject the stand-in in §7.1.
 
 ---

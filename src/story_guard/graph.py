@@ -1,13 +1,20 @@
 """Code-node graph. score stops after score_health. generate continues through the report."""
 
 import json
+import os
+import re
 from pathlib import Path
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from story_guard.narrative import write_narrative as request_narrative
-from story_guard.render import render_markdown
+from story_guard.narrative import NarrativeError, write_narrative as request_narrative
+from story_guard.render import (
+    RenderError,
+    render_markdown,
+    render_pdf as render_pdf_file,
+    validate_template,
+)
 from story_guard.score import score_health as score_record
 from story_guard.test_adapter import DummyTestAdapterError, fetch_tests
 
@@ -68,6 +75,7 @@ class GraphState(TypedDict, total=False):
     score: dict
     narrative: dict
     markdown_path: str
+    pdf_path: str
     token_count: int
     narrative_latency_ms: int
 
@@ -93,6 +101,7 @@ def gate_input(state: GraphState) -> dict:
         raise GateError("story id is not numeric")
     if story_id != _ACCEPTED_STORY_ID:
         raise GateError(f"story id {story_id} is not in the fixture")
+    validate_template(_template_path())
     return {"story_id": story_id}
 
 
@@ -154,20 +163,94 @@ def write_narrative(state: GraphState) -> dict:
 
 
 def render_pdf(state: GraphState) -> dict:
-    """Write the markdown report. A later slice adds the PDF file."""
-    out = artifacts_dir() / f"{state['story_id']}.md"
-    written = render_markdown(
+    """Write both reports from the same score, narrative, and fixture record."""
+    _validate_narrative_counts(state["score"], state["narrative"])
+    output_dir = artifacts_dir()
+    template = _template_path()
+    markdown_path = output_dir / f"{state['story_id']}.md"
+    pdf_path = output_dir / f"{state['story_id']}.pdf"
+    render_pdf_file(
         state["score"],
-        state["narrative"],
-        _template_path(),
-        out,
+        template,
+        pdf_path,
+        narrative=state["narrative"],
         record=state.get("record"),
     )
-    return {"markdown_path": str(written)}
+    render_markdown(
+        state["score"],
+        state["narrative"],
+        template,
+        markdown_path,
+        record=state.get("record"),
+    )
+    return {"markdown_path": str(markdown_path), "pdf_path": str(pdf_path)}
+
+
+def _validate_narrative_counts(score: dict, narrative: dict) -> None:
+    """Reject explicit narrative counts or coverage claims that conflict with the score."""
+    strings = [narrative.get("headline", "")]
+    sections = narrative.get("sections", [])
+    if isinstance(sections, list):
+        for section in sections:
+            if isinstance(section, str):
+                strings.append(section)
+            elif isinstance(section, dict):
+                strings.extend((section.get("name", ""), section.get("prose", section.get("text", ""))))
+    actions = narrative.get("actions", [])
+    if isinstance(actions, list):
+        strings.extend(action.get("text", action.get("action", "")) for action in actions if isinstance(action, dict))
+    text = "\n".join(value for value in strings if isinstance(value, str))
+    checks = (
+        ("scenario_count", r"\b(\d+)\s+(?:scenarios?|acceptance criteria)\b"),
+        ("test_count", r"\b(\d+)\s+(?:tests?|test cases?)\b"),
+        ("mapped_count", r"\b(\d+)\s+mapped(?:\s+(?:ACs?|tests?))?\b"),
+        ("bug_count", r"\b(\d+)\s+bugs?\b"),
+    )
+    for key, pattern in checks:
+        expected = score.get(key)
+        if isinstance(expected, int):
+            for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+                if int(match.group(1)) != expected:
+                    raise NarrativeError(
+                        f"narrative {key} {match.group(1)} does not match score {expected}"
+                    )
+    mapped_count = score.get("mapped_count")
+    if isinstance(mapped_count, int):
+        for match in re.finditer(
+            r"\bmapped(?:\s+ACs?|\s+tests?)?\s*(?:count)?\s*[:=]\s*(\d+)\b",
+            text,
+            flags=re.IGNORECASE,
+        ):
+            if int(match.group(1)) != mapped_count:
+                raise NarrativeError(
+                    f"narrative mapped_count {match.group(1)} does not match score {mapped_count}"
+                )
+    health = score.get("health")
+    if isinstance(health, str) and re.search(r"\bstory health\s*(?:is|:)\s*([^.!\n]+)", text, re.IGNORECASE):
+        match = re.search(r"\bstory health\s*(?:is|:)\s*([^.!\n]+)", text, re.IGNORECASE)
+        assert match is not None
+        if match.group(1).strip().casefold() != health.casefold():
+            raise NarrativeError("narrative story health does not match the score")
+    if score.get("mapped_count") == 0 and re.search(
+        r"\b(?:AC[-\w]*|acceptance criteria)\s+(?:is|are)\s+covered\b",
+        text,
+        re.IGNORECASE,
+    ):
+        raise NarrativeError("narrative claims coverage absent from the score")
+    rag = score.get("rag")
+    if isinstance(rag, str):
+        match = re.search(
+            r"\b(?:RAG|coverage)\s*(?:is|:)\s*(Red|Amber|Green)\b",
+            text,
+            re.IGNORECASE,
+        )
+        if match and match.group(1).casefold() != rag.casefold():
+            raise NarrativeError("narrative RAG does not match the score")
 
 
 def artifacts_dir() -> Path:
-    return _repo_root() / "artifacts"
+    configured = os.environ.get("STORY_GUARD_ARTIFACTS_DIR")
+    return Path(configured) if configured else _repo_root() / "artifacts"
 
 
 def _template_path() -> Path:
