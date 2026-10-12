@@ -178,12 +178,12 @@ Development runs on a Mac with **8 GB** of unified memory. macOS, the browser, a
 | Item | Choice |
 | --- | --- |
 | Runner | **Ollama**, OpenAI-compatible API at `http://127.0.0.1:11434/v1`. No API key. |
-| Default | **Qwen3.5 4B**, tag `qwen3.5:4b`, about 3.4 GB. |
+| Default | **Qwen3.5 9B**, tag `qwen3.5:9b`, about 6.6 GB. |
 | Fallback | **Phi-4 Mini**, tag `phi4-mini`, about 2.5 GB. Same `num_ctx`. Use it when the default will not stay resident with the editor open. |
 | Context | `num_ctx` **8192** on whichever tag is loaded. |
-| Out | 7B–12B checkpoints (about 5–7 GB). They fit a discrete 8 GB GPU. They do not fit this Mac while a person is working. A hosted model is not a second dev stack. |
+| Out | A second resident model, and checkpoints above 9B. A hosted model is not a second dev stack. |
 
-If an Ollama tag moves, keep the size class (weights at or under about 3.5 GB). Do not step up to a 7B to chase quality. One model loaded at a time.
+`qwen3.5:9b` is about 6.6 GB. On an 8 GB Mac, unload `qwen3.5:4b` and keep one model loaded.
 
 ---
 

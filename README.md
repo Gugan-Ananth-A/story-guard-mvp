@@ -8,19 +8,19 @@ Ollama serves the model at `http://127.0.0.1:11434`. The narrative request sets 
 
 | Role | Tag | Size |
 | --- | --- | --- |
-| Default | `qwen3.5:4b` | about 3.4 GB |
+| Default | `qwen3.5:9b` | about 6.6 GB |
 | Fallback | `phi4-mini` | about 2.5 GB |
 
-`phi4-mini` uses the same `num_ctx` of 8192. Pull it only when `qwen3.5:4b` will not stay resident with the editor open.
+`phi4-mini` uses the same `num_ctx` of 8192. Pull it only when `qwen3.5:9b` will not stay resident with the editor open.
 
-Load one model at a time. Do not load both.
+Load one model at a time. Do not load both. The 9B weights need about 6.6 GB, so close the other model before a generate.
 
 ```bash
-ollama pull qwen3.5:4b
+ollama pull qwen3.5:9b
 python scripts/ollama_smoke.py
 ```
 
-The smoke script targets `qwen3.5:4b`, sends `num_ctx` 8192 on the request, and prints one JSON object.
+The smoke script targets `qwen3.5:9b`, sends `num_ctx` 8192 on the request, and prints one JSON object.
 
 ## Trace
 

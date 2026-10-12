@@ -13,11 +13,11 @@ from pathlib import Path
 from typing import Any
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.pdfgen.canvas import Canvas
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate
+
+from story_guard.score import scored_criteria
 
 _PLACEHOLDER = re.compile(r"{{\s*([a-z_]+)\s*}}")
 
@@ -429,7 +429,15 @@ def _template_values(
             or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         )
     scored_scenarios = score.get("scenarios", scenario_rows)
-    display_scenarios = (record or {}).get("scenarios", scenario_rows)
+    if "story" not in score and isinstance(record, dict):
+        display_scenarios = scored_criteria(record)
+        ac_ids = [
+            str(row.get("ac_id", ""))
+            for row in display_scenarios
+            if isinstance(row, dict) and row.get("ac_id")
+        ]
+    else:
+        display_scenarios = scenario_rows
     mapping_lines = [f"Mapped ACs: {mapped_count}"]
     for row in scored_scenarios if isinstance(scored_scenarios, list) else []:
         if not isinstance(row, dict):
@@ -513,294 +521,42 @@ def _fill_template(template: str, values: dict[str, str]) -> str:
     return rendered
 
 
-def _paragraph_text(text: str) -> str:
-    markup = escape(text, quote=False)
-    return markup.replace("\n", "<br/>").replace("↔", '<font name="Symbol">&#x2194;</font>')
+class _NumberedCanvas(Canvas):
+    """Uncompressed canvas that draws Page X of Y after the pages are known."""
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        kwargs["pageCompression"] = 0
+        kwargs["invariant"] = 1
+        super().__init__(*args, **kwargs)
+        self._saved_page_states: list[dict] = []
 
-def _uncompressed_canvas(*args: Any, **kwargs: Any) -> Canvas:
-    kwargs["pageCompression"] = 0
-    kwargs["invariant"] = 1
-    return Canvas(*args, **kwargs)
+    def showPage(self) -> None:
+        self._saved_page_states.append(dict(self.__dict__))
+        self._startPage()
 
+    def save(self) -> None:
+        page_count = len(self._saved_page_states)
+        for state in self._saved_page_states:
+            self.__dict__.update(state)
+            self._draw_footer(page_count)
+            Canvas.showPage(self)
+        Canvas.save(self)
 
-def _page_footer(canvas: Canvas, document: SimpleDocTemplate) -> None:
-    canvas.saveState()
-    width, _height = letter
-    canvas.setStrokeColor(colors.HexColor("#cbd2dc"))
-    canvas.setLineWidth(0.5)
-    canvas.line(0.65 * inch, 0.38 * inch, width - 0.65 * inch, 0.38 * inch)
-    canvas.setFont("Helvetica", 7)
-    canvas.setFillColor(colors.HexColor("#687587"))
-    canvas.drawString(0.65 * inch, 0.23 * inch, "Story Health Report | Fixture analysis")
-    canvas.drawRightString(width - 0.65 * inch, 0.23 * inch, f"Page {document.page}")
-    canvas.restoreState()
-
-
-def _styled_report_flowables(
-    score: dict[str, Any], narrative: dict | None, record: dict | None
-) -> list[Any]:
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        "ReportTitle", parent=styles["Title"], fontName="Helvetica-Bold",
-        fontSize=21, leading=24, textColor=colors.white, alignment=0, spaceAfter=0,
-    )
-    section_style = ParagraphStyle(
-        "ReportSection", parent=styles["Heading2"], fontName="Helvetica-Bold",
-        fontSize=11, leading=13, textColor=colors.HexColor("#263d5b"),
-        spaceBefore=5, spaceAfter=3, keepWithNext=True,
-    )
-    body_style = ParagraphStyle(
-        "ReportBody", parent=styles["BodyText"], fontName="Helvetica",
-        fontSize=7.8, leading=9.2, textColor=colors.HexColor("#263746"), spaceAfter=2,
-    )
-    small_style = ParagraphStyle(
-        "ReportSmall", parent=body_style, fontSize=7, leading=8.5,
-    )
-    label_style = ParagraphStyle(
-        "ReportLabel", parent=small_style, alignment=1, textColor=colors.HexColor("#4b5665"),
-    )
-    metric_style = ParagraphStyle(
-        "ReportMetric", parent=styles["BodyText"], fontName="Helvetica-Bold",
-        fontSize=15, leading=17, alignment=1, textColor=colors.HexColor("#263d5b"),
-    )
-    heading = lambda text: Paragraph(escape(text), section_style)
-    body = lambda text: Paragraph(_paragraph_text(str(text)), body_style)
-    small = lambda text: Paragraph(_paragraph_text(str(text)), small_style)
-
-    values = _template_values(score, narrative, record)
-    story_id = values["story_id"]
-    title = values["title"]
-    source = values["source"]
-    generated_at = values["generated_at"]
-    rag = str(score.get("rag", "Unavailable"))
-    health = str(score.get("health", "Unavailable"))
-    rag_color = {
-        "red": colors.HexColor("#d94745"),
-        "amber": colors.HexColor("#e4a332"),
-        "green": colors.HexColor("#399b62"),
-    }.get(rag.casefold(), colors.HexColor("#64748b"))
-
-    meta = Paragraph(
-        f"<b>{escape(str(title))}</b><br/>Story {escape(str(story_id))} &nbsp;|&nbsp; "
-        f"{escape(source)}<br/>{escape(generated_at)}",
-        ParagraphStyle(
-            "ReportMeta", parent=small_style, textColor=colors.white,
-            alignment=2, leading=10,
-        ),
-    )
-    title_band = Table(
-        [[Paragraph("Story Health Report", title_style), meta]],
-        colWidths=[3.75 * inch, 3.1 * inch],
-    )
-    title_band.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#203b5d")),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (0, 0), 10),
-        ("RIGHTPADDING", (0, 0), (0, 0), 6),
-        ("LEFTPADDING", (1, 0), (1, 0), 4),
-        ("RIGHTPADDING", (1, 0), (1, 0), 10),
-        ("TOPPADDING", (0, 0), (-1, -1), 10),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-    ]))
-
-    count_values = [
-        ("SCENARIOS", score.get("scenario_count", 0), colors.HexColor("#5388b8")),
-        ("TESTS", score.get("test_count", 0), colors.HexColor("#357a8a")),
-        ("MAPPED", score.get("mapped_count", 0), colors.HexColor("#d99a28")),
-        ("BUGS", score.get("bug_count", 0), colors.HexColor("#d9544d")),
-        ("COVERAGE RAG", rag, rag_color),
-        ("STORY HEALTH", health, colors.HexColor("#399b62") if health == "No open bugs" else colors.HexColor("#d9544d")),
-    ]
-    metrics = Table(
-        [[Paragraph(str(value), metric_style) for _label, value, _color in count_values],
-         [Paragraph(label, label_style) for label, _value, _color in count_values]],
-        colWidths=[1.14 * inch] * len(count_values),
-    )
-    metric_style_colors = [
-        ("LINEABOVE", (index, 0), (index, 0), 2.2, color)
-        for index, (_label, _value, color) in enumerate(count_values)
-    ]
-    metrics.setStyle(TableStyle([
-        *metric_style_colors,
-        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f2f4f7")),
-        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#d3d8df")),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, 0), 6),
-        ("BOTTOMPADDING", (0, 1), (-1, 1), 5),
-    ]))
-
-    flowables: list[Any] = [
-        title_band,
-        Spacer(1, 5),
-        body("User story health, test coverage, and defect status."),
-        metrics,
-        heading("Title block"),
-        body(f"Project: {_cell((record or {}).get('area')) or 'Not provided'}"),
-        heading("Overall RAG"),
-    ]
-    rag_panel = Table(
-        [[Paragraph(f"<b>{escape(rag)}</b>", ParagraphStyle(
-            "RagValue", parent=body_style, fontName="Helvetica-Bold", fontSize=13,
-            textColor=colors.white,
-        )), Paragraph(
-            f"<b>Story health:</b> {escape(health)} &nbsp;&nbsp; "
-            f"<b>Rules:</b> {escape(', '.join(map(str, score.get('rule_ids', []))))}<br/>"
-            f"{escape(values['headline'])}", body_style,
-        )]],
-        colWidths=[0.95 * inch, 5.9 * inch],
-    )
-    rag_panel.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (0, 0), rag_color),
-        ("BACKGROUND", (1, 0), (1, 0), colors.HexColor("#f2f4f7")),
-        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd2dc")),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 7),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-    ]))
-    flowables.append(rag_panel)
-    narrative_text = _section_prose(narrative or {})
-    if narrative_text:
-        flowables.append(body(narrative_text))
-    if score.get("note"):
-        flowables.extend([Spacer(1, 4), small(f"Fixture note: {score['note']}")])
-
-    flowables.extend([heading("AC review"), body(values["ac_review"])])
-    ac_rows = [[small("AC ID"), small("Acceptance scenario"), small("Testable")]]
-    source_scenarios = (record or {}).get("scenarios", score.get("scenarios", []))
-    for scenario, score_row in zip(source_scenarios, score.get("scenarios", [])):
-        ac_rows.append([
-            small(scenario.get("ac_id", score_row.get("ac_id", ""))),
-            small(scenario.get("text", "")),
-            small("Yes" if scenario.get("testable") else "No"),
-        ])
-    flowables.append(_data_table(ac_rows, [0.7 * inch, 5.65 * inch, 0.5 * inch], header=True))
-    flowables.extend([heading("AC ↔ test mapping")])
-    mapping_rows = [[small("AC ID"), small("Explicit test IDs"), small("Gap")]]
-    scored_rows = score.get("scenarios", [])
-    for scenario in scored_rows:
-        mapping_rows.append([
-            small(scenario.get("ac_id", "")),
-            small(", ".join(scenario.get("mapped_test_ids", [])) or "None"),
-            small(scenario.get("gap", "No coverage")),
-        ])
-    flowables.append(_data_table(mapping_rows, [0.7 * inch, 2.15 * inch, 4.0 * inch], header=True))
-
-    flowables.extend([
-        heading("Coverage by type"),
-        body(
-            f"Total tests: {score.get('test_count', 0)} | "
-            f"Mapped ACs: {score.get('mapped_count', 0)} | "
-            f"Bugs: {score.get('bug_count', 0)}"
-        ),
-    ])
-    coverage_counts = score.get("coverage_by_type", {})
-    coverage_rows = [[small("Type"), small("Count")]] + [
-        [small(label.replace("happy", "Positive").title()), small(count)]
-        for label, count in coverage_counts.items()
-    ]
-    coverage_table = _data_table(coverage_rows, [3.1 * inch, 1.2 * inch], header=True)
-    summary = Table(
-        [[coverage_table, Paragraph(
-            f"<b>{score.get('scenario_count', 0)} acceptance criteria</b><br/>"
-            f"{score.get('adequate_count', 0)} adequately covered<br/>"
-            f"{score.get('partial_count', 0)} with gaps<br/>"
-            f"{score.get('none_count', 0)} not covered<br/><br/>"
-            f"Adequate: {score.get('adequate_count', 0)}; "
-            f"Partial: {score.get('partial_count', 0)}; "
-            f"None: {score.get('none_count', 0)}<br/>"
-            "Color key: Adequate, Partial, None.",
-            ParagraphStyle("CoverageSummary", parent=body_style, leading=14),
-        )]],
-        colWidths=[4.55 * inch, 2.3 * inch],
-    )
-    summary.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("BACKGROUND", (1, 0), (1, 0), colors.HexColor("#f2f4f7")),
-        ("BOX", (1, 0), (1, 0), 0.5, colors.HexColor("#cbd2dc")),
-        ("LEFTPADDING", (1, 0), (1, 0), 10),
-        ("TOPPADDING", (1, 0), (1, 0), 8),
-    ]))
-    flowables.append(summary)
-    flowables.extend([heading("Bugs")])
-    bug_columns = ("Bug ID", "Title", "State", "Story ID", "TC ID", "Priority", "Severity", "Assigned To", "Found in Env", "Application", "Created")
-    bug_rows = [[small(column) for column in bug_columns]]
-    bugs = score.get("bugs", [])
-    for bug in sorted(bugs, key=_bug_sort):
-        bug_rows.append([small(bug.get(key, "")) for key in (
-            "id", "title", "status", "linked_story_id", "linked_tc_id", "priority",
-            "severity", "assigned_to", "found_in", "application", "created",
-        )])
-    if not bugs:
-        bug_rows.append([small("No bugs.")] + [small("") for _ in bug_columns[1:]])
-    flowables.append(_data_table(
-        bug_rows,
-        [0.55 * inch, 1.6 * inch, 0.62 * inch, 0.63 * inch, 0.5 * inch, 0.48 * inch,
-         0.62 * inch, 0.75 * inch, 0.72 * inch, 0.67 * inch, 0.55 * inch],
-        header=True,
-        compact=True,
-    ))
-    flowables.extend([heading("Recommended actions")])
-    action_rows = [[small("Owner"), small("Action")]]
-    actions = (narrative or {}).get("actions", [])
-    action_rows.extend([
-        [small(action.get("owner", action.get("owner_role", ""))), small(action.get("text", ""))]
-        for action in actions if isinstance(action, dict)
-    ])
-    flowables.append(_data_table(action_rows, [0.8 * inch, 6.05 * inch], header=True))
-    flowables.extend([heading("Appendix")])
-    appendix_rows = [
-        [small("Story IDs"), small(values["raw_story_ids"])],
-        [small("AC IDs"), small(values["raw_ac_ids"])],
-        [small("Test IDs"), small(values["raw_test_ids"])],
-        [small("Bug IDs"), small(values["raw_bug_ids"])],
-    ]
-    flowables.append(_data_table(appendix_rows, [0.9 * inch, 5.95 * inch], header=False, compact=True))
-    return flowables
-
-
-def _data_table(
-    rows: list[list[Any]],
-    widths: list[float],
-    *,
-    header: bool,
-    compact: bool = False,
-) -> Table:
-    if header and rows:
-        header_style = ParagraphStyle(
-            "ReportTableHeader",
-            parent=getSampleStyleSheet()["BodyText"],
-            fontName="Helvetica-Bold",
-            fontSize=6.7 if compact else 7.2,
-            leading=8,
-            textColor=colors.white,
+    def _draw_footer(self, page_count: int) -> None:
+        page_width, _page_height = self._pagesize
+        self.saveState()
+        self.setStrokeColor(colors.HexColor("#d5dbe3"))
+        self.setLineWidth(0.4)
+        self.line(0.42 * inch, 0.36 * inch, page_width - 0.42 * inch, 0.36 * inch)
+        self.setFont("Helvetica", 8)
+        self.setFillColor(colors.HexColor("#6b7280"))
+        self.drawString(0.42 * inch, 0.2 * inch, "Story Guard  |  Story Health Report")
+        self.drawRightString(
+            page_width - 0.42 * inch,
+            0.2 * inch,
+            f"Page {self._pageNumber} of {page_count}",
         )
-        rows = [list(row) for row in rows]
-        rows[0] = [
-            Paragraph(cell.text, header_style) if isinstance(cell, Paragraph) else cell
-            for cell in rows[0]
-        ]
-    table = Table(rows, colWidths=widths, repeatRows=1 if header else 0, hAlign="LEFT")
-    style = [
-        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#cbd2dc")),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 3 if compact else 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 3 if compact else 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 2 if compact else 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2 if compact else 3),
-    ]
-    if header:
-        style.extend([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#294765")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ])
-        for row_index in range(1, len(rows)):
-            if row_index % 2 == 0:
-                style.append(("BACKGROUND", (0, row_index), (-1, row_index), colors.HexColor("#f1f4f7")))
-    table.setStyle(TableStyle(style))
-    return table
+        self.restoreState()
 
 
 def render_pdf(
@@ -820,27 +576,30 @@ def render_pdf(
     output_file = Path(out_path)
     temporary = output_file.with_suffix(output_file.suffix + ".tmp")
 
-    flowables = _styled_report_flowables(score, narrative, record)
+    from story_guard.report_layout import MARGIN_X, PAGE_SIZE, example_flowables, layout_errors
+
+    flowables = example_flowables(score, narrative, record)
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     try:
         document = SimpleDocTemplate(
             str(temporary),
-            pagesize=letter,
-            leftMargin=0.65 * inch,
-            rightMargin=0.65 * inch,
-            topMargin=0.48 * inch,
-            bottomMargin=0.55 * inch,
+            pagesize=PAGE_SIZE,
+            leftMargin=MARGIN_X,
+            rightMargin=MARGIN_X,
+            topMargin=0.34 * inch,
+            bottomMargin=0.5 * inch,
             title=str(score.get("title") or (score.get("story") or {}).get("title", "Story Health Report")),
         )
-        document.build(
-            flowables,
-            onFirstPage=_page_footer,
-            onLaterPages=_page_footer,
-            canvasmaker=_uncompressed_canvas,
-        )
+        document.build(flowables, canvasmaker=_NumberedCanvas)
         if not temporary.is_file() or temporary.stat().st_size == 0:
             raise RenderError("PDF renderer produced an empty artifact")
+        pdf_bytes = temporary.read_bytes()
+        missing = layout_errors(pdf_bytes)
+        if missing:
+            raise RenderError(
+                "PDF layout does not match the example report: " + ", ".join(missing)
+            )
         temporary.replace(output_file)
     except Exception:
         temporary.unlink(missing_ok=True)

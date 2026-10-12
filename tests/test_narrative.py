@@ -1,4 +1,4 @@
-"""write_narrative posts one Ollama request. A bad body is posted twice, then it raises."""
+"""write_narrative posts one Ollama request. A bad body is posted again until the attempt budget is spent."""
 
 import copy
 import inspect
@@ -33,6 +33,12 @@ def _score() -> dict:
 def _good() -> dict:
     return {
         "headline": "No open bugs",
+        "observations": [
+            "Story health is No open bugs.",
+            "The score records 1 scenario and 1 test.",
+            "Mapped count is 0.",
+            "Bug count is 0 and the none count is 1.",
+        ],
         "sections": [{"name": "Story health", "prose": "Story health is No open bugs."}],
         "actions": [
             {"owner": "QA", "text": "Map tests before counting coverage."},
@@ -82,7 +88,7 @@ def test_request_is_prefix_then_score_without_tools(monkeypatch):
     payload = seen[0]
     assert payload["format"] == "json"
     assert payload["stream"] is False
-    assert payload["think"] is False
+    assert payload["think"] is True
     assert "tools" not in payload
     assert payload["options"]["num_ctx"] == 8192
     assert payload["options"]["temperature"] == 0.1
@@ -96,7 +102,7 @@ def test_request_is_prefix_then_score_without_tools(monkeypatch):
     assert result["narrative"] == _good()
 
 
-def test_invalid_json_retries_once_then_raises(tmp_path, monkeypatch):
+def test_invalid_json_retries_until_the_budget_is_spent(tmp_path, monkeypatch):
     calls = []
 
     def post(payload):
@@ -107,10 +113,56 @@ def test_invalid_json_retries_once_then_raises(tmp_path, monkeypatch):
     out = tmp_path / "121213.pdf"
     with pytest.raises(NarrativeError):
         write_narrative(_score())
-    assert len(calls) == 2
-    assert calls[0] == calls[1]
+    assert len(calls) == narrative.ATTEMPTS
+    assert len(set(calls)) == 1
     assert not out.exists()
     assert not (tmp_path / "121213.md").exists()
+
+
+def test_health_colour_claim_is_rejected_and_then_accepted(monkeypatch):
+    seen = []
+
+    def post(payload):
+        seen.append(payload)
+        if len(seen) == 1:
+            rejected = _good()
+            rejected["actions"] = list(rejected["actions"])
+            rejected["actions"][0] = {
+                "owner": "QA",
+                "text": "Move the health band from Red to a green state by mapping tests.",
+            }
+            return _reply(json.dumps(rejected))
+        return _reply(json.dumps(_good()))
+
+    monkeypatch.setattr("story_guard.narrative._post", post)
+    result = write_narrative(_score())
+    assert result["narrative"] == _good()
+    assert "not a RAG colour" in seen[1]["messages"][2]["content"]
+
+
+def test_rule_miss_is_sent_back_before_the_next_attempt(monkeypatch):
+    seen = []
+
+    def post(payload):
+        seen.append(payload)
+        if len(seen) == 1:
+            rejected = _good()
+            rejected["observations"] = [
+                "Story health is Critical.",
+                "The score records 1 scenario and 1 test.",
+                "Mapped count is 0.",
+                "Bug count is 0 and the none count is 1.",
+            ]
+            return _reply(json.dumps(rejected))
+        return _reply(json.dumps(_good()))
+
+    monkeypatch.setattr("story_guard.narrative._post", post)
+    result = write_narrative(_score())
+    assert result["narrative"] == _good()
+    assert len(seen) == 2
+    assert [message["role"] for message in seen[0]["messages"]] == ["system", "user"]
+    assert [message["role"] for message in seen[1]["messages"]] == ["system", "user", "user"]
+    assert "story health" in seen[1]["messages"][2]["content"].casefold()
 
 
 def test_schema_miss_then_valid_json_keeps_the_body(monkeypatch):
@@ -158,14 +210,15 @@ def test_second_timeout_raises(tmp_path, monkeypatch):
         return _reply(
             json.dumps(_good()),
             load_duration=0,
-            total_duration=61_000_000_000,
+            total_duration=181_000_000_000,
         )
 
     monkeypatch.setattr("story_guard.narrative._post", post)
     out = tmp_path / "report.pdf"
     with pytest.raises(NarrativeError):
         write_narrative(_score())
-    assert len(calls) == 2
+    assert len(calls) == narrative.ATTEMPTS
+    assert len({json.dumps(payload, sort_keys=True) for payload in calls}) == 1
     assert not out.exists()
 
 

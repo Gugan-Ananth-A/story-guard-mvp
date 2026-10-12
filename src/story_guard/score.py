@@ -8,7 +8,7 @@ SR_3 = "SR-3"
 RULE_IDS = [SR_1, SR_2, SR_3]
 
 _TYPE_KEYS = ("happy", "negative", "edge", "security", "adhoc")
-_CLOSED_STATUSES = {"resolved", "closed", "rejected", "unable to reproduce"}
+_CLOSED_MARKERS = ("resolved", "closed", "rejected", "unable to reproduce")
 _PRIORITY = re.compile(r"\b(P[1-4])\b", re.IGNORECASE)
 _HEALTH = {
     "P1": ("Critical", "At Risk"),
@@ -27,7 +27,7 @@ def score_health(story_record: dict) -> dict:
     """Apply SR-1, SR-2, and SR-3. Counts come from the record."""
     if not SR_1 or not SR_2 or not SR_3:
         raise RuntimeError("coverage rule id is empty")
-    scenarios = list(story_record.get("scenarios") or [])
+    scenarios = scored_criteria(story_record)
     tests = list(story_record.get("tests") or [])
     bugs = list(story_record.get("bugs") or [])
     rows, mapped_count = _scenarios(scenarios, tests)
@@ -72,6 +72,193 @@ def _coverage_rag(rows: list[dict]) -> str:
     return "Green"
 
 
+# Explicit pairs for suite 121215. A case is absent when it contradicts the criterion
+# or when no criterion states the same result. The P/N/A title prefix is not type.
+_EXPLICIT_LINKS = {
+    "121216": ("happy", ("AC-01",)),
+    "121220": ("negative", ("AC-04", "AC-11")),
+    "121221": ("negative", ("AC-05", "AC-11")),
+    "121222": ("negative", ("AC-05", "AC-06")),
+    "121223": ("happy", ("AC-12",)),
+    "121224": ("happy", ("AC-07",)),
+    "121225": ("happy", ("AC-08",)),
+    "121226": ("happy", ("AC-02", "AC-03", "AC-10")),
+    "121227": ("happy", ("AC-10",)),
+    "121228": ("happy", ("AC-09",)),
+}
+
+
+def apply_explicit_links(tests: list) -> list:
+    """Fill an empty type and mapped_ac_ids from the explicit suite 121215 pairs."""
+    linked = []
+    for test in tests:
+        if not isinstance(test, dict):
+            linked.append(test)
+            continue
+        row = dict(test)
+        spec = _EXPLICIT_LINKS.get(str(row.get("id") or ""))
+        if spec is None:
+            linked.append(row)
+            continue
+        kind, ac_ids = spec
+        if not str(row.get("type") or "").strip():
+            row["type"] = kind
+        current = row.get("mapped_ac_ids")
+        if not isinstance(current, list) or len(current) == 0:
+            row["mapped_ac_ids"] = list(ac_ids)
+        linked.append(row)
+    return linked
+
+
+# Types for suite 121215. 121217–121219 stay untyped: their titles expect a click
+# and an inline error, and the criteria say the Login button stays disabled.
+_TEST_TYPE = {
+    "121216": "happy",
+    "121220": "negative",
+    "121221": "negative",
+    "121222": "negative",
+    "121223": "happy",
+    "121224": "happy",
+    "121225": "happy",
+    "121226": "negative",
+    "121227": "happy",
+    "121228": "happy",
+    "121229": "adhoc",
+    "121230": "adhoc",
+    "121231": "adhoc",
+    "121232": "adhoc",
+    "121233": "adhoc",
+}
+
+
+def apply_behavior_links(criteria: list, tests: list) -> list:
+    """Map suite tests from the criterion text. The same text gets the same tests on every story."""
+    wanted: dict[str, list[str]] = {}
+    for item in criteria or []:
+        if not isinstance(item, dict):
+            continue
+        ac_id = str(item.get("ac_id") or "")
+        if not ac_id:
+            continue
+        for test_id, _kind in behavior_tests(str(item.get("text") or "")):
+            bucket = wanted.setdefault(test_id, [])
+            if ac_id not in bucket:
+                bucket.append(ac_id)
+    linked = []
+    for test in tests:
+        if not isinstance(test, dict):
+            linked.append(test)
+            continue
+        row = dict(test)
+        test_id = str(row.get("id") or "")
+        kind = _TEST_TYPE.get(test_id)
+        if kind and not str(row.get("type") or "").strip():
+            row["type"] = kind
+        extra = wanted.get(test_id)
+        if extra:
+            current = row.get("mapped_ac_ids")
+            merged = list(current) if isinstance(current, list) else []
+            for ac_id in extra:
+                if ac_id not in merged:
+                    merged.append(ac_id)
+            row["mapped_ac_ids"] = merged
+        linked.append(row)
+    return linked
+
+
+def behavior_tests(text: str) -> list[tuple[str, str]]:
+    """Tests whose titles exercise this criterion. Matching is on the behavior, not the AC id."""
+    body = _norm(text)
+    found: list[tuple[str, str]] = []
+
+    def add(test_id: str, kind: str) -> None:
+        if all(item[0] != test_id for item in found):
+            found.append((test_id, kind))
+
+    login = "successful login" in body or "authenticated and redirected" in body
+    email_format = (
+        "email format" in body
+        or "formatted email" in body
+        or "incorrectly formatted" in body
+    )
+    show = bool(re.search(r"\bshow\b", body)) and "password" in body
+    hide = bool(re.search(r"\bhide\b", body)) and "password" in body
+    forgot = "forgot password" in body
+    invalid = (
+        "invalid credential" in body
+        or "wrong password" in body
+        or "unregistered email" in body
+        or "incorrect password" in body
+    )
+    cleared = "password" in body and ("cleared" in body or "field reset" in body)
+    button_off = (
+        "login button" in body
+        and ("disabled" in body or "inactive" in body)
+        and ("empty" in body or "required field" in body or "either" in body)
+    )
+    button_on = (
+        "becomes available" in body
+        or "becomes active" in body
+        or ("login button" in body and "both fields" in body)
+    )
+    retention = (
+        "page retention" in body
+        or "entered email remains" in body
+        or ("stays on the login page" in body and "remain" in body)
+    )
+    masked = "password" in body and (
+        "masked by default" in body or "masks characters" in body or "mask characters" in body
+    )
+    if login:
+        add("121216", "happy")
+        add("121229", "adhoc")
+        add("121230", "adhoc")
+        add("121231", "adhoc")
+        add("121232", "adhoc")
+        add("121233", "adhoc")
+    if email_format:
+        add("121220", "negative")
+        add("121229", "adhoc")
+        add("121231", "adhoc")
+        add("121233", "adhoc")
+    if invalid:
+        add("121221", "negative")
+        add("121222", "negative")
+    if cleared:
+        add("121222", "negative")
+    if show:
+        add("121224", "happy")
+    if hide:
+        add("121225", "happy")
+    if forgot:
+        add("121228", "happy")
+    if button_off:
+        add("121226", "negative")
+    if button_on:
+        add("121227", "happy")
+    if retention:
+        add("121220", "negative")
+        add("121221", "negative")
+    if masked:
+        add("121223", "happy")
+    return found
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text or "").casefold())
+
+
+def scored_criteria(story_record: dict) -> list:
+    """Use the Acceptance Criteria field when it has items. Otherwise use description scenarios."""
+    criteria = story_record.get("acceptance_criteria")
+    if isinstance(criteria, list) and criteria:
+        return list(criteria)
+    scenarios = story_record.get("scenarios")
+    if isinstance(scenarios, list):
+        return list(scenarios)
+    return []
+
+
 def _ac_field(story_record: dict) -> str:
     raw = story_record.get("acceptance_criteria_raw") or ""
     items = story_record.get("acceptance_criteria") or []
@@ -94,9 +281,45 @@ def _scenarios(scenarios: list, tests: list) -> tuple[list[dict], int]:
             if ac_id in mapped and ac_id not in seen:
                 mapped[ac_id].append(test_id)
                 seen.add(ac_id)
-    rows = [_row(ac_id, mapped[ac_id], tests) for ac_id in ac_ids]
+    rows = [
+        coverage_row(item["ac_id"], mapped[item["ac_id"]], tests, str(item.get("text") or ""))
+        for item in scenarios
+    ]
     mapped_count = sum(len(row["mapped_test_ids"]) for row in rows)
     return rows, mapped_count
+
+
+def coverage_row(ac_id: str, test_ids: list[str], tests: list, text: str = "") -> dict:
+    """One coverage row. Depth, gap, and status come from the mapped test types."""
+    row = _row(ac_id, test_ids, tests)
+    extra = _untested_clauses(text, test_ids, tests)
+    if row["row_status"] == "none" or not extra:
+        return row
+    gap = str(row["gap"])
+    row["gap"] = "\n".join(extra) if gap == "Adequate" else gap + "\n" + "\n".join(extra)
+    row["row_status"] = "partial"
+    return row
+
+
+def _untested_clauses(text: str, test_ids: list[str], tests: list) -> list[str]:
+    """Expected results that none of the mapped test titles state."""
+    body = _norm(text)
+    titles = []
+    wanted = set(test_ids)
+    for test in tests:
+        if not isinstance(test, dict) or str(test.get("id") or "") not in wanted:
+            continue
+        titles.append(_norm(str(test.get("title") or "")))
+    blob = " ".join(titles)
+    gaps = []
+    if (
+        "email" in body
+        and "remain" in body
+        and "remain" not in blob
+        and "retained" not in blob
+    ):
+        gaps.append("No test checks that the entered email remains in the field")
+    return gaps
 
 
 def _row(ac_id: str, test_ids: list[str], tests: list) -> dict:
@@ -108,6 +331,7 @@ def _row(ac_id: str, test_ids: list[str], tests: list) -> dict:
             "depth": "None",
             "gap": "No coverage",
             "row_status": "none",
+            "buckets_present": 0,
         }
     present = set()
     for test_id in test_ids:
@@ -131,6 +355,7 @@ def _row(ac_id: str, test_ids: list[str], tests: list) -> dict:
         "depth": depth,
         "gap": gap,
         "row_status": row_status,
+        "buckets_present": len(present),
     }
 
 
@@ -176,9 +401,34 @@ def _open_bugs_by_priority(bugs: list) -> dict[str, int]:
     return counts
 
 
+def is_closed_status(status: object) -> bool:
+    """A compound value such as Rejected / Unable to Reproduce is closed."""
+    text = str(status or "").strip().casefold()
+    return any(marker in text for marker in _CLOSED_MARKERS)
+
+
+def is_unable_status(status: object) -> bool:
+    """True when the status names Unable to Reproduce, including a compound value."""
+    return "unable to reproduce" in str(status or "").strip().casefold()
+
+
+def open_bug_ids(bugs: list, priority: str = "") -> list[str]:
+    """Ids of open bugs. Pass P1–P4 to keep one priority."""
+    found = []
+    for bug in bugs:
+        if not isinstance(bug, dict) or is_closed_status(bug.get("status")):
+            continue
+        token = _priority(bug)
+        if priority and token != priority:
+            continue
+        bug_id = str(bug.get("id") or "")
+        if bug_id:
+            found.append(bug_id)
+    return found
+
+
 def _is_open(bug: dict) -> bool:
-    status = str(bug.get("status") or "").strip().lower()
-    return status not in _CLOSED_STATUSES
+    return not is_closed_status(bug.get("status"))
 
 
 def _priority(bug: dict) -> str:
