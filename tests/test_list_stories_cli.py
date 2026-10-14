@@ -53,6 +53,75 @@ def test_fetch_stories_command_outputs_each_result_and_returns_nonzero_for_error
     assert json.loads(capsys.readouterr().out) == results
 
 
+def test_fetch_story_and_bug_writes_no_fixtures_or_artifacts(
+    tmp_path, monkeypatch, capsys
+):
+    from io import BytesIO
+    from pathlib import Path
+
+    project_url = "https://dev.azure.com/storyguard/sample"
+    payloads = {
+        100: {
+            "id": 100,
+            "fields": {
+                "System.WorkItemType": "User Story",
+                "System.Title": "Login story",
+                "System.State": "New",
+                "System.Description": "",
+            },
+            "relations": [
+                {
+                    "rel": "System.LinkTypes.Related",
+                    "url": f"{project_url}/_apis/wit/workitems/999",
+                }
+            ],
+        },
+        999: {
+            "id": 999,
+            "fields": {
+                "System.WorkItemType": "Bug",
+                "System.Title": "Login defect",
+                "System.State": "Active",
+            },
+        },
+    }
+    requests = []
+
+    def opener(request, timeout):
+        requests.append(request)
+        work_item_id = int(request.full_url.rsplit("/", 1)[-1].split("?", 1)[0])
+        return BytesIO(json.dumps(payloads[work_item_id]).encode("utf-8"))
+
+    fixture_dir = Path(__file__).resolve().parents[1] / "fixtures"
+    fixture_snapshot = {
+        path.relative_to(fixture_dir): path.read_bytes()
+        for path in fixture_dir.rglob("*")
+        if path.is_file()
+    }
+    artifacts_dir = tmp_path / "artifacts"
+    monkeypatch.setenv("ADO_PROJECT_URL", project_url)
+    monkeypatch.setenv("ADO_PAT", "offline-test-pat")
+    monkeypatch.setenv("STORY_GUARD_ARTIFACTS_DIR", str(artifacts_dir))
+    monkeypatch.setattr("story_guard.ado_client.urlopen", opener)
+
+    result = main(["fetch-stories", "--story-ids", "100", "999"])
+
+    captured = capsys.readouterr()
+    records = json.loads(captured.out)
+    assert result == 1
+    assert records[0]["story"]["id"] == "100"
+    assert records[1]["id"] == "999"
+    assert records[1]["error"]["code"] == "not_user_story"
+    assert all(request.get_method() == "GET" for request in requests)
+    assert {
+        path.relative_to(fixture_dir): path.read_bytes()
+        for path in fixture_dir.rglob("*")
+        if path.is_file()
+    } == fixture_snapshot
+    assert not artifacts_dir.exists() or list(artifacts_dir.iterdir()) == []
+    assert not (artifacts_dir / "999.pdf").exists()
+
+
 def test_list_stories_command_reports_missing_ado_configuration(monkeypatch, capsys):
     monkeypatch.delenv("ADO_PROJECT_URL", raising=False)
     monkeypatch.delenv("ADO_PAT", raising=False)
