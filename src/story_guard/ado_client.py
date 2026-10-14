@@ -395,6 +395,31 @@ class ADOClient:
             )
         return steps
 
+    def list_iterations(self) -> List[str]:
+        """Return iteration paths configured for the current project."""
+        query = urlencode({"$depth": 14, "api-version": ADO_API_VERSION})
+        request = Request(
+            f"{self.project_url}/_apis/wit/classificationnodes/Iterations?{query}",
+            headers=self._headers(),
+        )
+        payload = self._request_json(request, "iteration list")
+        children = payload.get("children", [])
+        if not isinstance(children, list):
+            raise ADOResponseError("ADO iteration response is missing its children list")
+
+        paths = []
+        pending = list(reversed(children))
+        while pending:
+            node = pending.pop()
+            if not isinstance(node, dict) or not isinstance(node.get("path"), str):
+                raise ADOResponseError("ADO iteration response contains an invalid node")
+            paths.append(node["path"])
+            node_children = node.get("children", [])
+            if not isinstance(node_children, list):
+                raise ADOResponseError("ADO iteration response contains an invalid children list")
+            pending.extend(reversed(node_children))
+        return paths
+
     def list_user_stories(self, iteration_path: str) -> List[Dict[str, str]]:
         """Return all User Stories in the exact iteration path, ordered by ID."""
         if not isinstance(iteration_path, str) or not iteration_path.strip():
@@ -460,6 +485,11 @@ class ADOClient:
         except HTTPError as error:
             if error.code == 404 and not_found_message:
                 raise WorkItemNotFoundError(not_found_message) from error
+            if error.code in {401, 403}:
+                raise ADOConfigurationError(
+                    "ADO configuration error: ADO_PAT cannot read the configured project; "
+                    "check the PAT and project permissions"
+                ) from error
             raise ADORequestError(
                 f"ADO {operation} request failed with HTTP status {error.code}"
             ) from error

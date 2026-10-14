@@ -108,6 +108,49 @@ class ADOClientTests(unittest.TestCase):
 
         self.assertIsInstance(raised.exception, ADOClientError)
 
+    def test_list_iterations_returns_nested_paths_from_configured_project(self) -> None:
+        project_url = "https://dev.azure.com/different-org/Commerce"
+        requests = []
+        payload = {
+            "children": [
+                {
+                    "path": "Commerce\\Release 1",
+                    "children": [
+                        {"path": "Commerce\\Release 1\\Sprint 1"},
+                        {"path": "Commerce\\Release 1\\Sprint 2"},
+                    ],
+                },
+                {"path": "Commerce\\Backlog"},
+            ]
+        }
+
+        def opener(request, timeout):
+            requests.append(request)
+            return BytesIO(json.dumps(payload).encode("utf-8"))
+
+        client = ADOClient(project_url, "offline-test-pat", opener=opener)
+
+        self.assertEqual(
+            client.list_iterations(),
+            [
+                "Commerce\\Release 1",
+                "Commerce\\Release 1\\Sprint 1",
+                "Commerce\\Release 1\\Sprint 2",
+                "Commerce\\Backlog",
+            ],
+        )
+        self.assertEqual(len(requests), 1)
+        self.assertTrue(requests[0].full_url.startswith(project_url))
+        self.assertIn("/_apis/wit/classificationnodes/Iterations?", requests[0].full_url)
+        self.assertEqual(requests[0].get_method(), "GET")
+
+    def test_iteration_access_denied_is_a_configuration_error(self) -> None:
+        def opener(request, timeout):
+            raise HTTPError(request.full_url, 403, "Forbidden", {}, BytesIO())
+
+        with self.assertRaisesRegex(ADOConfigurationError, "ADO_PAT cannot read"):
+            self.make_client(opener).list_iterations()
+
     def test_list_user_stories_pages_by_id_and_excludes_other_types(self) -> None:
         requests = []
         pages = {0: [11, 12], 12: [13, 14], 14: []}

@@ -122,6 +122,54 @@ def test_fetch_story_and_bug_writes_no_fixtures_or_artifacts(
     assert not (artifacts_dir / "999.pdf").exists()
 
 
+def test_sprints_command_prints_iteration_paths(monkeypatch, capsys):
+    paths = ["Commerce\\Release 1\\Sprint 1", "Commerce\\Release 1\\Sprint 2"]
+
+    class FakeADOClient:
+        def list_iterations(self):
+            return paths
+
+    monkeypatch.setattr(
+        ADOClient,
+        "from_env",
+        classmethod(lambda _cls: FakeADOClient()),
+    )
+
+    result = main(["sprints"])
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert captured.out.splitlines() == paths
+    assert captured.err == ""
+
+
+def test_sprints_command_handles_project_access_denial_without_artifacts(
+    tmp_path, monkeypatch, capsys
+):
+    from io import BytesIO
+    from urllib.error import HTTPError
+
+    project_url = "https://dev.azure.com/customer-org/Commerce"
+    artifacts_dir = tmp_path / "artifacts"
+
+    def opener(request, timeout):
+        raise HTTPError(request.full_url, 403, "Forbidden", {}, BytesIO())
+
+    monkeypatch.setenv("ADO_PROJECT_URL", project_url)
+    monkeypatch.setenv("ADO_PAT", "offline-test-pat")
+    monkeypatch.setenv("STORY_GUARD_ARTIFACTS_DIR", str(artifacts_dir))
+    monkeypatch.setattr("story_guard.ado_client.urlopen", opener)
+
+    result = main(["sprints"])
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert captured.out == ""
+    assert "configuration error" in captured.err
+    assert "ADO_PAT cannot read" in captured.err
+    assert not artifacts_dir.exists()
+
+
 def test_list_stories_command_reports_missing_ado_configuration(monkeypatch, capsys):
     monkeypatch.delenv("ADO_PROJECT_URL", raising=False)
     monkeypatch.delenv("ADO_PAT", raising=False)
