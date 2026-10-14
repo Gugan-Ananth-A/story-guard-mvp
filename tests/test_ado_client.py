@@ -184,5 +184,117 @@ class ADOClientTests(unittest.TestCase):
                 self.make_client(opener).list_user_stories("Project\\Sprint")
 
 
+    def test_fetch_many_stories_records_expected_errors_and_continues(self) -> None:
+        requests = []
+        project_url = "https://dev.azure.com/storyguard/sample"
+        story_payload = {
+            "id": 10,
+            "fields": {
+                "System.WorkItemType": "User Story",
+                "System.Title": "Login story",
+                "System.State": "New",
+                "System.Description": "A test story",
+                "System.AreaPath": "Project",
+                "System.IterationPath": "Project\\Sprint",
+            },
+            "relations": [
+                {
+                    "rel": "System.LinkTypes.Related",
+                    "url": f"{project_url}/_apis/wit/workitems/301",
+                },
+                {
+                    "rel": "Microsoft.VSTS.Common.TestedBy-Forward",
+                    "url": f"{project_url}/_apis/wit/workitems/401",
+                },
+                {
+                    "rel": "System.LinkTypes.Related",
+                    "url": f"{project_url}/_apis/wit/workitems/402",
+                },
+            ],
+        }
+        payloads = {
+            10: story_payload,
+            301: {
+                "id": 301,
+                "fields": {
+                    "System.WorkItemType": "Bug",
+                    "System.Title": "Login validation defect",
+                    "System.State": "Active",
+                    "Microsoft.VSTS.Common.Severity": "2 - High",
+                    "Microsoft.VSTS.Common.Priority": 2,
+                    "Custom.Age": "12",
+                    "System.AssignedTo": {"displayName": "QA Owner"},
+                    "System.CreatedDate": "2026-10-01T00:00:00Z",
+                },
+            },
+            401: {
+                "id": 401,
+                "fields": {
+                    "System.WorkItemType": "Test Case",
+                    "System.Title": "Submit valid login credentials",
+                    "Microsoft.VSTS.TCM.Steps": (
+                        "<steps><step><parameterizedString>Enter valid credentials"
+                        "</parameterizedString><parameterizedString>Dashboard is shown"
+                        "</parameterizedString></step></steps>"
+                    ),
+                },
+            },
+            402: {
+                "id": 402,
+                "fields": {
+                    "System.WorkItemType": "Test Case",
+                    "System.Title": "Unlinked suite case",
+                },
+            },
+            30: {
+                "id": 30,
+                "fields": {"System.WorkItemType": "Bug", "System.Title": "Not a story"},
+            },
+            40: {
+                "id": 40,
+                "fields": {
+                    "System.WorkItemType": "User Story",
+                    "System.Title": "Following story",
+                    "System.State": "New",
+                    "System.Description": "",
+                },
+            },
+        }
+
+        def opener(request, timeout):
+            requests.append(request)
+            item_id = int(urlsplit(request.full_url).path.rsplit("/", 1)[-1])
+            if item_id == 20:
+                raise HTTPError(request.full_url, 404, "Not Found", {}, BytesIO())
+            return BytesIO(json.dumps(payloads[item_id]).encode("utf-8"))
+
+        results = self.make_client(opener).fetch_many_stories([10, 20, 30, 40])
+
+        self.assertEqual([result["id"] for result in results], ["10", "20", "30", "40"])
+        self.assertEqual(results[0]["story"]["title"], "Login story")
+        self.assertEqual([bug["id"] for bug in results[0]["bugs"]], ["301"])
+        self.assertEqual(results[0]["bugs"][0]["linked_story_id"], "10")
+        self.assertEqual(
+            [case["id"] for case in results[0]["test_cases"]], ["401"]
+        )
+        self.assertEqual(
+            results[0]["test_cases"][0]["steps"],
+            [{"action": "Enter valid credentials", "expected_result": "Dashboard is shown"}],
+        )
+        self.assertEqual(results[1]["error"]["code"], "not_found")
+        self.assertEqual(results[2]["error"]["code"], "not_user_story")
+        self.assertEqual(results[3]["story"]["title"], "Following story")
+        self.assertTrue(all(request.get_method() == "GET" for request in requests))
+        self.assertEqual(
+            [int(urlsplit(request.full_url).path.rsplit("/", 1)[-1]) for request in requests],
+            [10, 301, 401, 402, 20, 30, 40],
+        )
+
+    def test_fetch_many_stories_rejects_invalid_ids_before_request(self) -> None:
+        client = self.make_client(lambda request, timeout: self.fail("request ran"))
+        with self.assertRaises(ADOConfigurationError):
+            client.fetch_many_stories([10, 0, 11])
+
+
 if __name__ == "__main__":
     unittest.main()

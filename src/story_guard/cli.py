@@ -12,7 +12,8 @@ from story_guard.trace import record_success
 _USAGE = (
     "usage: story-guard score --story-id 121213\n"
     "       story-guard generate --story-id 121213\n"
-    "       story-guard list-stories --iteration-path 'Project\\Iteration'"
+    "       story-guard list-stories --iteration-path 'Project\\Iteration'\n"
+    "       story-guard fetch-stories --story-ids 121213 121214"
 )
 
 
@@ -30,6 +31,8 @@ def main(argv: list[str] | None = None) -> int:
     generate.add_argument("--live", action="store_true", default=False)
     list_stories = sub.add_parser("list-stories")
     list_stories.add_argument("--iteration-path", required=True)
+    fetch_stories = sub.add_parser("fetch-stories")
+    fetch_stories.add_argument("--story-ids", nargs="+", type=int, required=True)
     parsed = parser.parse_args(args)
     if parsed.command == "score":
         return _score(parsed.story_id)
@@ -37,6 +40,8 @@ def main(argv: list[str] | None = None) -> int:
         return _generate(parsed.story_id, parsed.live)
     if parsed.command == "list-stories":
         return _list_stories(parsed.iteration_path)
+    if parsed.command == "fetch-stories":
+        return _fetch_stories(parsed.story_ids)
     print(_USAGE, file=sys.stderr)
     return 2
 
@@ -61,6 +66,18 @@ def _list_stories(iteration_path: str) -> int:
         return 1
     print(json.dumps(stories, indent=2))
     return 0
+
+
+def _fetch_stories(story_ids: list[int]) -> int:
+    from story_guard.ado_client import ADOClient, ADOClientError
+
+    try:
+        results = ADOClient.from_env().fetch_many_stories(story_ids)
+    except ADOClientError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(json.dumps(results, indent=2))
+    return 1 if any("error" in result for result in results) else 0
 
 
 def _generate(story_id: str, live: bool) -> int:
