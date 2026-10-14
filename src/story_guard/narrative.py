@@ -12,6 +12,7 @@ from story_guard.prefix import load_prefix
 TEMPERATURE = 0.1
 NUM_CTX = 8192
 MAX_TOKENS = 8192
+PROMPT_TOKEN_TARGET = 4096
 GENERATION_TIMEOUT_S = 60
 # Cold start sits outside the 60s generation cap, so the socket wait is longer.
 HTTP_TIMEOUT_S = 300
@@ -29,7 +30,7 @@ def write_narrative(score: dict) -> dict:
     """Call Ollama once. Invalid JSON or a missed schema retries that same request once."""
     if not isinstance(score, dict):
         raise NarrativeError("score is not an object")
-    payload = _payload(score)
+    payload, payload_score = _build_payload(score)
     last_error: NarrativeError | None = None
     latency_ms = 0
     for _attempt in range(2):
@@ -44,7 +45,7 @@ def write_narrative(score: dict) -> dict:
             continue
         latency_ms += _elapsed_ms(started)
         return {
-            "score": score,
+            "score": payload_score,
             "narrative": narrative,
             "token_count": _token_count(response),
             "narrative_latency_ms": latency_ms,
@@ -53,12 +54,20 @@ def write_narrative(score: dict) -> dict:
 
 
 def _payload(score: dict) -> dict:
+    """Return the model request while keeping the stable prefix first."""
+    return _build_payload(score)[0]
+
+
+def _build_payload(score: dict) -> tuple[dict, dict]:
     try:
         prefix = load_prefix()
     except OSError as exc:
         raise NarrativeError("narrative prefix is missing") from exc
     try:
-        score_json = json.dumps(score, ensure_ascii=False, separators=(",", ":"))
+        payload_score = _bounded_score(score, prefix)
+        score_json = json.dumps(
+            payload_score, ensure_ascii=False, separators=(",", ":")
+        )
     except TypeError as exc:
         raise NarrativeError("score is not JSON") from exc
     payload = {
@@ -79,7 +88,67 @@ def _payload(score: dict) -> dict:
     }
     if "tools" in payload or any("tools" in message for message in payload["messages"]):
         raise NarrativeError("narrative request must not include tools")
-    return payload
+    return payload, payload_score
+
+
+def _bounded_score(score: dict, prefix: str) -> dict:
+    """Trim whole test cases until the prompt is near its 4,096-token target."""
+    test_cases = score.get("test_cases")
+    if not isinstance(test_cases, list):
+        return score
+
+    bounded = dict(score)
+    bounded["test_cases"] = list(test_cases)
+    bounded["test_suite_truncated"] = bool(score.get("test_suite_truncated", False))
+    if not test_cases:
+        return bounded
+
+    case_lengths = [
+        len(json.dumps(case, ensure_ascii=False, separators=(",", ":")))
+        for case in test_cases
+    ]
+    empty_suite = dict(bounded, test_cases=[])
+    fixed_chars = len(prefix) + len(
+        json.dumps(empty_suite, ensure_ascii=False, separators=(",", ":"))
+    )
+    total_chars = fixed_chars + sum(case_lengths) + max(0, len(test_cases) - 1)
+
+    # A conservative character estimate keeps the rubric inside the target
+    # without adding a tokenizer dependency.
+    if (total_chars + 2) // 3 <= PROMPT_TOKEN_TARGET:
+        return bounded
+
+    bounded["test_suite_truncated"] = True
+    if not score.get("test_suite_truncated", False):
+        total_chars -= 1  # `true` serializes one character shorter than `false`.
+
+    # Keep cases without step data unless the stepped cases alone cannot fit.
+    removal_order = [
+        index
+        for index in range(len(test_cases) - 1, -1, -1)
+        if isinstance(test_cases[index], dict) and test_cases[index].get("steps")
+    ]
+    removal_order.extend(
+        index
+        for index in range(len(test_cases) - 1, -1, -1)
+        if not isinstance(test_cases[index], dict) or not test_cases[index].get("steps")
+    )
+
+    removed = set()
+    remaining_count = len(test_cases)
+    for index in removal_order:
+        if (total_chars + 2) // 3 <= PROMPT_TOKEN_TARGET:
+            break
+        total_chars -= case_lengths[index]
+        if remaining_count > 1:
+            total_chars -= 1
+        remaining_count -= 1
+        removed.add(index)
+
+    bounded["test_cases"] = [
+        case for index, case in enumerate(test_cases) if index not in removed
+    ]
+    return bounded
 
 
 def _model() -> str:

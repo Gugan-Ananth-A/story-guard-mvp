@@ -6,7 +6,12 @@ from pathlib import Path
 import pytest
 
 from story_guard.cli import main
-from story_guard.graph import build_generate_graph, fetch, run
+from story_guard.graph import (
+    build_generate_graph,
+    fetch,
+    run,
+    write_narrative as narrative_node,
+)
 from story_guard.narrative import NarrativeError
 from story_guard.render import RenderError, render_markdown
 
@@ -56,6 +61,25 @@ def test_generate_graph_order():
         ("write_narrative", "render_pdf"),
         ("render_pdf", "__end__"),
     }
+
+
+def test_narrative_node_keeps_the_bounded_score_for_rendering(monkeypatch):
+    score = {"test_suite_truncated": True, "test_cases": []}
+    narrative = {"headline": "Complete", "sections": [], "actions": []}
+    monkeypatch.setattr(
+        "story_guard.graph.request_narrative",
+        lambda _score: {
+            "score": score,
+            "narrative": narrative,
+            "token_count": 12,
+            "narrative_latency_ms": 4,
+        },
+    )
+
+    result = narrative_node({"score": {"test_suite_truncated": False}})
+
+    assert result["score"] is score
+    assert result["score"]["test_suite_truncated"] is True
 
 
 def test_generate_writes_eight_headings_and_score_pdf(tmp_path, monkeypatch, capsys):

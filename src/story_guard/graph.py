@@ -224,6 +224,7 @@ def write_narrative(state: GraphState) -> dict:
     """One model call. The node passes the score object and nothing else."""
     result = request_narrative(state["score"])
     return {
+        "score": result["score"],
         "narrative": result["narrative"],
         "token_count": result["token_count"],
         "narrative_latency_ms": result["narrative_latency_ms"],
