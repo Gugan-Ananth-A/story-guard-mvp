@@ -28,6 +28,8 @@ Keys: `id`, `title`, `type`, `mapped_ac_ids`, `last_result`, `last_result_at`, `
 
 `mapped_ac_ids` is an array of `ac_id` strings. An empty array is a real value. It means the test maps to no `ac_id` (`docs/requirements.md` §6.4).
 
+`steps` is optional. When present, it is an array of `{ "action": string, "expected_result": string }` objects. A case without steps remains in the suite with an empty `steps` array.
+
 ## BugRecord
 
 Keys: `id`, `title`, `severity`, `priority`, `status`, `age`, `found_in`, `linked_story_id`, `linked_tc_id`, `assigned_to`, `application`, `created`.

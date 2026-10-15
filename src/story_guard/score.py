@@ -43,6 +43,8 @@ def score_health(story_record: dict) -> dict:
         "scenario_count": len(scenarios),
         "scenarios": rows,
         "test_count": len(tests),
+        "test_cases": _test_cases(tests),
+        "test_suite_truncated": False,
         "mapped_count": mapped_count,
         "bug_count": len(bugs),
         "open_bug_count": sum(1 for bug in bugs if _is_open(bug)),
@@ -59,6 +61,32 @@ def score_health(story_record: dict) -> dict:
         "rule_ids": list(RULE_IDS),
         "note": note,
     }
+
+
+def _test_cases(tests: list[dict]) -> list[dict]:
+    """Keep case identity and action/expected-result pairs for the narrative input."""
+    cases = []
+    for test in tests:
+        steps = []
+        raw_steps = test.get("steps")
+        if isinstance(raw_steps, list):
+            for step in raw_steps:
+                if not isinstance(step, dict):
+                    continue
+                action = step.get("action")
+                expected_result = step.get("expected_result")
+                if isinstance(action, str) and isinstance(expected_result, str):
+                    steps.append(
+                        {"action": action, "expected_result": expected_result}
+                    )
+        cases.append(
+            {
+                "id": str(test.get("id", "")),
+                "title": test.get("title", ""),
+                "steps": steps,
+            }
+        )
+    return cases
 
 
 def _coverage_rag(rows: list[dict]) -> str:
