@@ -14,6 +14,7 @@ _USAGE = (
     "usage: story-guard score --story-id 121213\n"
     "       story-guard generate --story-id 121213\n"
     "       story-guard generate --story-id 121213 --live\n"
+    "       story-guard generate --story-id 121213 --story-id 123086 --live\n"
     "       story-guard generate --story-id 121213 --test-plan-id 121214 --live"
 )
 
@@ -29,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     score = sub.add_parser("score")
     score.add_argument("--story-id", required=True)
     generate = sub.add_parser("generate")
-    generate.add_argument("--story-id", required=True)
+    generate.add_argument("--story-id", required=True, action="append")
     generate.add_argument("--test-plan-id", default="")
     generate.add_argument("--live", action="store_true", default=False)
     parsed = parser.parse_args(args)
@@ -51,7 +52,23 @@ def _score(story_id: str) -> int:
     return 0
 
 
-def _generate(story_id: str, live: bool, test_plan_id: str = "") -> int:
+def _generate(story_ids: list[str], live: bool, test_plan_id: str = "") -> int:
+    """Generate each story. A failure is reported and the next story still runs."""
+    failed = False
+    for story_id in story_ids:
+        if _generate_one(story_id, live, test_plan_id) != 0:
+            failed = True
+    return 1 if failed else 0
+
+
+def _named(story_id: str, exc: BaseException) -> str:
+    text = str(exc).strip()
+    if story_id and story_id in text:
+        return text
+    return f"story {story_id}: {text}"
+
+
+def _generate_one(story_id: str, live: bool, test_plan_id: str = "") -> int:
     from story_guard.ado_client import ADOClientError
 
     def progress(message: str) -> None:
@@ -66,7 +83,7 @@ def _generate(story_id: str, live: bool, test_plan_id: str = "") -> int:
     try:
         state = run_generate(state_in)
     except (GateError, ContractError, NarrativeError, RenderError, ADOClientError) as exc:
-        print(str(exc), file=sys.stderr)
+        print(_named(story_id, exc), file=sys.stderr)
         return 1
     try:
         record_success(
@@ -75,7 +92,7 @@ def _generate(story_id: str, live: bool, test_plan_id: str = "") -> int:
             state["narrative_latency_ms"],
         )
     except OSError as exc:
-        print(str(exc), file=sys.stderr)
+        print(_named(story_id, exc), file=sys.stderr)
         return 1
     print(state["markdown_path"])
     return 0

@@ -2,7 +2,10 @@
 
 import json
 
+import pytest
+
 from story_guard.analysis import analyze_live, result_from_judgment
+from story_guard.narrative import NarrativeError
 
 
 def _record():
@@ -521,6 +524,132 @@ def test_slow_analysis_retries_with_a_shorter_limit(monkeypatch):
     assert result["score"]["health"] == "High"
 
 
+def test_unknown_ids_and_other_types_are_dropped_and_health_stays_on_the_bugs():
+    from story_guard.report_layout import _facts
+
+    record = _record()
+    record["bugs"] = [
+        {
+            "id": "122589",
+            "title": "Login outage",
+            "severity": "1 - Critical",
+            "priority": "P1",
+            "status": "New",
+            "age": 1,
+            "found_in": "Staging",
+            "linked_story_id": "123086",
+            "linked_tc_id": "",
+        }
+    ]
+    record["tests"] = [
+        {
+            "id": "42",
+            "title": "Valid login",
+            "type": "",
+            "mapped_ac_ids": [],
+        },
+        {
+            "id": "43",
+            "title": "Bad password",
+            "type": "",
+            "mapped_ac_ids": [],
+        },
+        {
+            "id": "44",
+            "title": "Refresh the page",
+            "type": "",
+            "mapped_ac_ids": [],
+        },
+        {
+            "id": "45",
+            "title": "Security scan",
+            "type": "",
+            "mapped_ac_ids": [],
+        },
+    ]
+    judgment = _judgment()
+    judgment["health"] = "Green"
+    judgment["test_coverage_percent"] = 99
+    judgment["reviews"] = [
+        {
+            "ac_id": "AC-01",
+            "mapped_test_ids": ["42", "999", "43", "44", "45"],
+            "test_types": {
+                "42": "positive",
+                "43": "negative",
+                "44": "adhoc",
+                "45": "security",
+                "46": "edge",
+                "999": "happy",
+            },
+            "coverage_status": "adequate",
+            "finding": "AC-01 is 80% covered by 999.",
+        },
+        {
+            "ac_id": "AC-02",
+            "mapped_test_ids": ["999"],
+            "test_types": {"43": "edge"},
+            "coverage_status": "adequate",
+        },
+    ]
+    result = result_from_judgment(record, judgment)
+    score = result["score"]
+    rows = {row["ac_id"]: row for row in score["scenarios"]}
+    facts = _facts(score, record)
+
+    assert rows["AC-01"]["mapped_test_ids"] == ["42", "43", "44", "45"]
+    assert "999" not in rows["AC-01"]["mapped_test_ids"]
+    assert rows["AC-02"]["mapped_test_ids"] == []
+    assert rows["AC-02"]["row_status"] == "none"
+    assert score["coverage_by_type"]["happy"] == 1
+    assert score["coverage_by_type"]["negative"] == 1
+    assert score["coverage_by_type"]["adhoc"] == 1
+    assert score["coverage_by_type"]["edge"] == 0
+    assert score["coverage_by_type"]["security"] == 0
+    assert score["coverage_by_type"]["unset"] == 1
+    assert score["health"] == "Critical"
+    assert score["health_band"] == "At Risk"
+    assert "test_coverage_percent" not in score
+    assert facts["coverage_label"] == "50%"
+    assert facts["health"] == "Critical"
+    assert "99%" not in facts["coverage_label"]
+
+
+def test_a_finding_with_a_percent_sign_is_replaced(monkeypatch):
+    def fake_chat(messages, num_predict=8192):
+        payload = json.loads(messages[1]["content"].split("\n", 1)[1])
+        ac_id = payload["acceptance_criterion"]["ac_id"]
+        return {
+            "message": {
+                "content": json.dumps(
+                    {
+                        "ac_id": ac_id,
+                        "mapped_test_ids": ["121216"] if ac_id == "AC-01" else [],
+                        "test_types": {"121216": "edge", "121220": "security"},
+                        "coverage_status": "adequate",
+                        "quality": {"status": "good", "testable": True, "issues": []},
+                        "finding": f"{ac_id} is 40% covered.",
+                    }
+                )
+            },
+            "prompt_eval_count": 1,
+            "eval_count": 1,
+        }
+
+    monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
+    result = analyze_live(_record())
+    text = " ".join(result["narrative"]["observations"])
+    rows = {row["ac_id"]: row for row in result["score"]["scenarios"]}
+
+    assert "%" not in text
+    assert "No listed test checks AC-02." in text
+    assert "AC-01 is checked by 121216." in text
+    assert result["score"]["coverage_by_type"]["unset"] == 2
+    assert result["score"]["coverage_by_type"]["edge"] == 0
+    assert rows["AC-01"]["mapped_test_ids"] == ["121216"]
+    assert result["score"]["health"] == "High"
+
+
 def test_live_review_calls_qwen35_4b(monkeypatch):
     monkeypatch.setenv("STORY_GUARD_LLM", "ollama")
     monkeypatch.setenv("OLLAMA_MODEL", "qwen3.5:4b")
@@ -585,3 +714,44 @@ def test_live_review_calls_qwen35_4b(monkeypatch):
     assert seen["body"]["think"] is False
     assert seen["body"]["options"]["num_ctx"] == 8192
     assert result["score"]["scenarios"][0]["mapped_test_ids"] == ["42"]
+
+
+def _failure_reply(mode: str, ac_id: str) -> dict:
+    if mode == "down":
+        raise NarrativeError("ollama request failed: connection refused")
+    if mode == "timeout":
+        return {
+            "message": {
+                "content": json.dumps(
+                    {
+                        "ac_id": ac_id,
+                        "mapped_test_ids": [],
+                        "finding": f"No listed test checks {ac_id}.",
+                    }
+                )
+            },
+            "prompt_eval_count": 1,
+            "eval_count": 1,
+            "load_duration": 0,
+            "total_duration": 181_000_000_000,
+        }
+    return {"message": {"content": "not json"}}
+
+
+@pytest.mark.parametrize("mode", ["json", "down", "timeout"])
+def test_model_failure_names_the_story_and_stops_that_review(monkeypatch, mode):
+    from story_guard.narrative import ATTEMPTS
+
+    calls = {"n": 0}
+
+    def fake_chat(messages, num_predict=8192):
+        calls["n"] += 1
+        payload = json.loads(messages[1]["content"].split("\n", 1)[1])
+        return _failure_reply(mode, payload["acceptance_criterion"]["ac_id"])
+
+    record = _record()
+    record["acceptance_criteria"] = [record["acceptance_criteria"][0]]
+    monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
+    with pytest.raises(NarrativeError, match="story 123086"):
+        analyze_live(record)
+    assert calls["n"] == (ATTEMPTS if mode == "json" else 1)

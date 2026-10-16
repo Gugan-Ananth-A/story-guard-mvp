@@ -474,6 +474,120 @@ def test_live_generate_links_positive_negative_and_adhoc_before_the_report(
     assert pdf_text.count("Adequate") >= 2
 
 
+def _live_story(story_id: str) -> dict:
+    return {
+        "id": story_id,
+        "title": f"Story {story_id}",
+        "type": "User Story",
+        "state": "New",
+        "description": "",
+        "area": "Ecom MVP",
+        "iteration": "Ecom MVP",
+        "raw_ac_text": (
+            "Scenario: AC-01 Admin signs in\n"
+            "Expected: The admin reaches the dashboard."
+        ),
+        "tests": [
+            {
+                "id": "42",
+                "title": "Admin signs in",
+                "type": "",
+                "mapped_ac_ids": [],
+                "last_result": "",
+                "last_result_at": None,
+                "linked_bug_ids": [],
+                "suite_id": "S1",
+                "suite_name": "Suite",
+            }
+        ],
+        "bugs": [],
+    }
+
+
+@pytest.mark.parametrize("mode", ["json", "down", "timeout"])
+def test_a_failed_story_writes_nothing_and_the_next_story_still_runs(
+    tmp_path, monkeypatch, capsys, mode
+):
+    import json
+
+    from story_guard.ado_client import ADOClient
+    from story_guard.narrative import ATTEMPTS, NarrativeError
+
+    calls = {"111111": 0, "222222": 0}
+
+    class FakeADOClient:
+        def load_live_story(self, story_id, test_plan_id=None):
+            return _live_story(str(story_id))
+
+    def fake_chat(messages, num_predict=8192):
+        payload = json.loads(messages[1]["content"].split("\n", 1)[1])
+        story_id = payload["story_id"]
+        calls[story_id] += 1
+        if story_id == "111111":
+            if mode == "down":
+                raise NarrativeError("ollama request failed: connection refused")
+            if mode == "timeout":
+                return {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "ac_id": "AC-01",
+                                "mapped_test_ids": [],
+                                "finding": "No listed test checks AC-01.",
+                            }
+                        )
+                    },
+                    "load_duration": 0,
+                    "total_duration": 181_000_000_000,
+                    "eval_count": 1,
+                }
+            return {"message": {"content": "not json"}}
+        return {
+            "message": {
+                "content": json.dumps(
+                    {
+                        "ac_id": "AC-01",
+                        "mapped_test_ids": ["42"],
+                        "test_types": {"42": "happy"},
+                        "coverage_status": "partial",
+                        "quality": {"status": "good", "testable": True, "issues": []},
+                        "finding": "AC-01 is checked by 42.",
+                    }
+                )
+            },
+            "prompt_eval_count": 2,
+            "eval_count": 3,
+        }
+
+    monkeypatch.setattr(ADOClient, "from_env", classmethod(lambda cls: FakeADOClient()))
+    monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
+    monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
+    monkeypatch.setattr("story_guard.cli.record_success", lambda *_args: None)
+
+    code = main(
+        [
+            "generate",
+            "--story-id",
+            "111111",
+            "--story-id",
+            "222222",
+            "--live",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert code == 1
+    assert "story 111111:" in captured.err
+    assert not (tmp_path / "111111.md").exists()
+    assert not (tmp_path / "111111.pdf").exists()
+    assert (tmp_path / "222222.md").is_file()
+    assert (tmp_path / "222222.pdf").is_file()
+    assert str(tmp_path / "222222.md") in captured.out
+    assert str(tmp_path / "111111.md") not in captured.out
+    assert calls["111111"] == (ATTEMPTS if mode == "json" else 1)
+    assert calls["222222"] == 1
+
+
 def test_graph_live_path_does_not_call_behavior_links():
     import story_guard.analysis as analysis
     import story_guard.graph as graph

@@ -38,8 +38,32 @@ class NarrativeError(Exception):
 ATTEMPTS = 4
 
 
+def story_failure(exc: BaseException) -> bool:
+    """Provider outage and the generation cap stop the story. Bad JSON does not."""
+    text = str(exc).casefold()
+    if "request failed" in text:
+        return True
+    return f"exceeded {GENERATION_TIMEOUT_S} seconds of generation" in text
+
+
+def name_story(story_id: str, exc: NarrativeError) -> NarrativeError:
+    """Attach the story id when the failure text does not already name it."""
+    text = str(exc).strip()
+    if not story_id or story_id in text:
+        return exc
+    return NarrativeError(f"story {story_id}: {text}", retry_hint=exc.retry_hint)
+
+
 def write_narrative(score: dict) -> dict:
     """Call the configured provider until the attempt budget is spent."""
+    try:
+        return _write_narrative(score)
+    except NarrativeError as exc:
+        story_id = str(score.get("story_id") or "") if isinstance(score, dict) else ""
+        raise name_story(story_id, exc) from exc
+
+
+def _write_narrative(score: dict) -> dict:
     if not isinstance(score, dict):
         raise NarrativeError("score is not an object")
     last_error: NarrativeError | None = None
@@ -53,6 +77,8 @@ def write_narrative(score: dict) -> dict:
             _check_cap(response)
             narrative = _parse_narrative(response, score)
         except NarrativeError as exc:
+            if story_failure(exc):
+                raise
             latency_ms += _elapsed_ms(started)
             last_error = exc
             # A malformed response is itself useful feedback for the next

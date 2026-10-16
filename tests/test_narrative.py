@@ -224,7 +224,7 @@ def test_token_cap_retries_then_keeps_a_short_reply(monkeypatch):
     assert result["narrative"]["headline"] == "No open bugs"
 
 
-def test_second_timeout_raises(tmp_path, monkeypatch):
+def test_generation_over_180_seconds_fails_the_story(tmp_path, monkeypatch):
     calls = []
 
     def post(payload):
@@ -237,11 +237,23 @@ def test_second_timeout_raises(tmp_path, monkeypatch):
 
     monkeypatch.setattr("story_guard.narrative._post", post)
     out = tmp_path / "report.pdf"
-    with pytest.raises(NarrativeError):
+    with pytest.raises(NarrativeError, match="story fixture-story"):
         write_narrative(_score())
-    assert len(calls) == narrative.ATTEMPTS
-    assert len({json.dumps(payload, sort_keys=True) for payload in calls}) == 1
+    assert len(calls) == 1
     assert not out.exists()
+
+
+def test_ollama_down_fails_the_story_without_a_retry(monkeypatch):
+    calls = {"n": 0}
+
+    def post(payload):
+        calls["n"] += 1
+        raise NarrativeError("ollama request failed: connection refused")
+
+    monkeypatch.setattr("story_guard.narrative._post", post)
+    with pytest.raises(NarrativeError, match="story fixture-story"):
+        write_narrative(_score())
+    assert calls["n"] == 1
 
 
 def test_cold_start_is_outside_the_generation_cap(monkeypatch):
