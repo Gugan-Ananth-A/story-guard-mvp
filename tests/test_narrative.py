@@ -7,7 +7,12 @@ import json
 import pytest
 
 from story_guard import narrative
-from story_guard.narrative import NarrativeError, write_narrative
+from story_guard.narrative import (
+    NarrativeError,
+    _load_response_json,
+    ollama_chat,
+    write_narrative,
+)
 from story_guard.prefix import load_prefix
 
 
@@ -69,6 +74,22 @@ def test_token_count_is_the_successful_narrative_call(monkeypatch):
     assert result["narrative_latency_ms"] >= 0
 
 
+def test_structured_parser_accepts_ollama_thinking_fallback():
+    response = {
+        "message": {
+            "content": "",
+            "thinking": json.dumps(_good()),
+        }
+    }
+
+    assert _load_response_json(response, "narrative") == _good()
+
+
+def test_empty_structured_response_has_a_corrective_error():
+    with pytest.raises(NarrativeError, match="content and thinking were empty"):
+        _load_response_json({"message": {"content": "", "thinking": ""}}, "analysis")
+
+
 def test_temperature_is_fixed_on_the_function():
     assert narrative.TEMPERATURE == 0.1
     assert list(inspect.signature(write_narrative).parameters) == ["score"]
@@ -88,7 +109,7 @@ def test_request_is_prefix_then_score_without_tools(monkeypatch):
     payload = seen[0]
     assert payload["format"] == "json"
     assert payload["stream"] is False
-    assert payload["think"] is True
+    assert payload["think"] is False
     assert "tools" not in payload
     assert payload["options"]["num_ctx"] == 8192
     assert payload["options"]["temperature"] == 0.1
@@ -114,7 +135,8 @@ def test_invalid_json_retries_until_the_budget_is_spent(tmp_path, monkeypatch):
     with pytest.raises(NarrativeError):
         write_narrative(_score())
     assert len(calls) == narrative.ATTEMPTS
-    assert len(set(calls)) == 1
+    assert len(set(calls)) == 2
+    assert "previous JSON was rejected" in json.loads(calls[1])["messages"][2]["content"]
     assert not out.exists()
     assert not (tmp_path / "121213.md").exists()
 
@@ -270,3 +292,122 @@ def test_host_and_model_come_from_the_environment(monkeypatch):
     assert seen["body"]["model"] == "phi4-mini"
     assert "authorization" not in seen["header_names"]
     assert "tools" not in seen["body"]
+
+
+def test_grok_chat_posts_json_to_xai(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "grok")
+    monkeypatch.setenv("XAI_API_KEY", "test-key")
+    monkeypatch.delenv("XAI_MODEL", raising=False)
+    seen = {}
+
+    class _Body:
+        def __init__(self, raw: bytes):
+            self._raw = raw
+
+        def read(self, _n=-1):
+            return self._raw
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def fake_urlopen(request, timeout):
+        seen["url"] = request.full_url
+        seen["timeout"] = timeout
+        seen["body"] = json.loads(request.data.decode("utf-8"))
+        seen["authorization"] = request.get_header("Authorization")
+        raw = json.dumps(
+            {
+                "choices": [{"message": {"role": "assistant", "content": "{\"ok\": true}"}}],
+                "usage": {"prompt_tokens": 11, "completion_tokens": 4},
+            }
+        ).encode("utf-8")
+        return _Body(raw)
+
+    monkeypatch.setattr("story_guard.narrative.urllib.request.urlopen", fake_urlopen)
+    response = ollama_chat(
+        [{"role": "user", "content": "Return one JSON object."}],
+        num_predict=512,
+    )
+    assert seen["url"] == narrative.GROK_CHAT_URL
+    assert seen["timeout"] == narrative.HTTP_TIMEOUT_S
+    assert seen["body"]["model"] == "grok-4.7"
+    assert seen["body"]["response_format"] == {"type": "json_object"}
+    assert seen["body"]["max_tokens"] == 512
+    assert seen["body"]["store"] is False
+    assert "tools" not in seen["body"]
+    assert seen["authorization"] == "Bearer test-key"
+    assert response["message"]["content"] == "{\"ok\": true}"
+    assert response["prompt_eval_count"] == 11
+    assert response["eval_count"] == 4
+
+
+def test_grok_chat_requires_an_api_key(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "grok")
+    monkeypatch.delenv("XAI_API_KEY", raising=False)
+    with pytest.raises(NarrativeError, match="XAI_API_KEY"):
+        ollama_chat([{"role": "user", "content": "{}"}])
+
+
+def test_deepseek_narrative_uses_json_chat_completions(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "deepseek-test-key")
+    monkeypatch.delenv("DEEPSEEK_MODEL", raising=False)
+    seen = {}
+
+    class _Body:
+        def __init__(self, raw: bytes):
+            self._raw = raw
+
+        def read(self, _n=-1):
+            return self._raw
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def fake_urlopen(request, timeout):
+        seen["url"] = request.full_url
+        seen["timeout"] = timeout
+        seen["body"] = json.loads(request.data.decode("utf-8"))
+        seen["authorization"] = request.get_header("Authorization")
+        raw = json.dumps(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": json.dumps(_good()),
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 11, "completion_tokens": 4},
+            }
+        ).encode("utf-8")
+        return _Body(raw)
+
+    monkeypatch.setattr("story_guard.narrative.urllib.request.urlopen", fake_urlopen)
+    result = write_narrative(_score())
+
+    assert seen["url"] == "https://api.deepseek.com/chat/completions"
+    assert seen["timeout"] == narrative.HTTP_TIMEOUT_S
+    assert seen["body"]["model"] == "deepseek-chat"
+    assert seen["body"]["max_tokens"] == narrative.MAX_TOKENS
+    assert seen["body"]["response_format"] == {"type": "json_object"}
+    assert seen["body"]["stream"] is False
+    assert "think" not in seen["body"]
+    assert seen["authorization"] == "Bearer deepseek-test-key"
+    assert result["narrative"] == _good()
+    assert result["token_count"] == 15
+
+
+def test_deepseek_chat_requires_an_api_key(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "deepseek")
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    with pytest.raises(NarrativeError, match="DEEPSEEK_API_KEY"):
+        ollama_chat([{"role": "user", "content": "Return JSON."}])

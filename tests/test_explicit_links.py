@@ -76,7 +76,7 @@ def test_explicit_links_score_gaps_and_cover_login_retention():
     assert "121222" not in by_id["AC-11"]["mapped_test_ids"]
 
 
-def test_live_fetch_maps_behavior_for_every_story(monkeypatch):
+def test_live_fetch_preserves_empty_source_links_for_model_review(monkeypatch):
     from story_guard.ado_client import ADOClient
     from story_guard.graph import _fetch_live
 
@@ -110,12 +110,12 @@ def test_live_fetch_maps_behavior_for_every_story(monkeypatch):
         return _fetch_live({"story_id": story_id, "test_plan_id": None})
 
     linked = {test["id"]: test for test in install("121213")["tests"]}
-    assert linked["121220"]["mapped_ac_ids"] == ["AC-11"]
-    assert linked["121221"]["mapped_ac_ids"] == ["AC-11"]
-    assert "AC-11" not in linked["121222"]["mapped_ac_ids"]
+    assert linked["121220"]["mapped_ac_ids"] == []
+    assert linked["121221"]["mapped_ac_ids"] == []
+    assert linked["121222"]["mapped_ac_ids"] == []
     assert linked["121216"]["mapped_ac_ids"] == []
 
     other = {test["id"]: test for test in install("123086")["tests"]}
-    assert other["121220"]["mapped_ac_ids"] == ["AC-11"]
-    assert other["121221"]["mapped_ac_ids"] == ["AC-11"]
+    assert other["121220"]["mapped_ac_ids"] == []
+    assert other["121221"]["mapped_ac_ids"] == []
     assert other["121216"]["mapped_ac_ids"] == []

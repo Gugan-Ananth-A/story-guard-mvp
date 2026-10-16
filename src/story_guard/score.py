@@ -89,7 +89,7 @@ _EXPLICIT_LINKS = {
 
 
 def apply_explicit_links(tests: list) -> list:
-    """Fill an empty type and mapped_ac_ids from the explicit suite 121215 pairs."""
+    """Legacy fixture helper; live graph analysis does not call this function."""
     linked = []
     for test in tests:
         if not isinstance(test, dict):
@@ -132,7 +132,8 @@ _TEST_TYPE = {
 
 
 def apply_behavior_links(criteria: list, tests: list) -> list:
-    """Map suite tests from the criterion text. The same text gets the same tests on every story."""
+    """Legacy fixture helper; live graph analysis predicts links with the model."""
+    flags_by_ac: list[tuple[str, set[str]]] = []
     wanted: dict[str, list[str]] = {}
     for item in criteria or []:
         if not isinstance(item, dict):
@@ -140,6 +141,7 @@ def apply_behavior_links(criteria: list, tests: list) -> list:
         ac_id = str(item.get("ac_id") or "")
         if not ac_id:
             continue
+        flags_by_ac.append((ac_id, _criterion_flags(str(item.get("text") or ""))))
         for test_id, _kind in behavior_tests(str(item.get("text") or "")):
             bucket = wanted.setdefault(test_id, [])
             if ac_id not in bucket:
@@ -156,92 +158,187 @@ def apply_behavior_links(criteria: list, tests: list) -> list:
             row["type"] = kind
         extra = wanted.get(test_id)
         if extra:
-            current = row.get("mapped_ac_ids")
-            merged = list(current) if isinstance(current, list) else []
-            for ac_id in extra:
-                if ac_id not in merged:
-                    merged.append(ac_id)
-            row["mapped_ac_ids"] = merged
+            _merge_links(row, extra)
         linked.append(row)
+    _link_unnamed_cases(linked, flags_by_ac)
     return linked
+
+
+def _merge_links(row: dict, ac_ids: list[str]) -> None:
+    current = row.get("mapped_ac_ids")
+    merged = list(current) if isinstance(current, list) else []
+    for ac_id in ac_ids:
+        if ac_id not in merged:
+            merged.append(ac_id)
+    row["mapped_ac_ids"] = merged
+
+
+def _link_unnamed_cases(tests: list, flags_by_ac: list[tuple[str, set[str]]]) -> None:
+    """Link a case the known-id map does not name, when its title or steps check that behavior."""
+    for row in tests:
+        if not isinstance(row, dict) or str(row.get("id") or "") in _TEST_TYPE:
+            continue
+        flags = _case_flags(row)
+        if not flags:
+            continue
+        kind = _case_kind(row, flags)
+        if kind and not str(row.get("type") or "").strip():
+            row["type"] = kind
+        matched = [ac_id for ac_id, criterion_flags in flags_by_ac if flags & criterion_flags]
+        if matched:
+            _merge_links(row, matched)
+
+
+_BEHAVIOR_CASES = {
+    "login": (
+        ("121216", "happy"),
+        ("121229", "adhoc"),
+        ("121230", "adhoc"),
+        ("121231", "adhoc"),
+        ("121232", "adhoc"),
+        ("121233", "adhoc"),
+    ),
+    "email_format": (
+        ("121220", "negative"),
+        ("121229", "adhoc"),
+        ("121231", "adhoc"),
+        ("121233", "adhoc"),
+    ),
+    "invalid": (("121221", "negative"), ("121222", "negative")),
+    "cleared": (("121222", "negative"),),
+    "show": (("121224", "happy"),),
+    "hide": (("121225", "happy"),),
+    "forgot": (("121228", "happy"),),
+    "button_off": (("121226", "negative"),),
+    "button_on": (("121227", "happy"),),
+    "retention": (("121220", "negative"), ("121221", "negative")),
+    "masked": (("121223", "happy"),),
+}
+_FLAG_ORDER = (
+    "login",
+    "email_format",
+    "invalid",
+    "cleared",
+    "show",
+    "hide",
+    "forgot",
+    "button_off",
+    "button_on",
+    "retention",
+    "masked",
+)
+_NEGATIVE_CASE = re.compile(
+    r"\b(?:invalid|incorrect|unregistered|failed|empty)\b"
+    r"|special characters|not exposed|session expir"
+)
+_ADHOC_CASE = re.compile(
+    r"\b(?:leading|trailing|whitespace|keyboard|browser|refresh|direct|length)\b"
+    r"|\bspaces?\b|\brepeat|screen size|\bback\b"
+    r"|\bclear(?:ed|ing)?\b|\bedit(?:ing|ed)?\b"
+)
 
 
 def behavior_tests(text: str) -> list[tuple[str, str]]:
     """Tests whose titles exercise this criterion. Matching is on the behavior, not the AC id."""
-    body = _norm(text)
+    flags = _criterion_flags(text)
     found: list[tuple[str, str]] = []
 
     def add(test_id: str, kind: str) -> None:
         if all(item[0] != test_id for item in found):
             found.append((test_id, kind))
 
-    login = "successful login" in body or "authenticated and redirected" in body
-    email_format = (
+    for name in _FLAG_ORDER:
+        if name not in flags:
+            continue
+        for test_id, kind in _BEHAVIOR_CASES[name]:
+            add(test_id, kind)
+    return found
+
+
+def _criterion_flags(text: str) -> set[str]:
+    body = _norm(text)
+    flags: set[str] = set()
+    if "successful login" in body or "authenticated and redirected" in body:
+        flags.add("login")
+    if (
         "email format" in body
         or "formatted email" in body
         or "incorrectly formatted" in body
-    )
-    show = bool(re.search(r"\bshow\b", body)) and "password" in body
-    hide = bool(re.search(r"\bhide\b", body)) and "password" in body
-    forgot = "forgot password" in body
-    invalid = (
+    ):
+        flags.add("email_format")
+    if re.search(r"\bshow\b", body) and "password" in body:
+        flags.add("show")
+    if re.search(r"\bhide\b", body) and "password" in body:
+        flags.add("hide")
+    if "forgot password" in body:
+        flags.add("forgot")
+    if (
         "invalid credential" in body
         or "wrong password" in body
         or "unregistered email" in body
         or "incorrect password" in body
-    )
-    cleared = "password" in body and ("cleared" in body or "field reset" in body)
-    button_off = (
+    ):
+        flags.add("invalid")
+    if "password" in body and ("cleared" in body or "field reset" in body):
+        flags.add("cleared")
+    if (
         "login button" in body
         and ("disabled" in body or "inactive" in body)
         and ("empty" in body or "required field" in body or "either" in body)
-    )
-    button_on = (
+    ):
+        flags.add("button_off")
+    if (
         "becomes available" in body
         or "becomes active" in body
         or ("login button" in body and "both fields" in body)
-    )
-    retention = (
+    ):
+        flags.add("button_on")
+    if (
         "page retention" in body
         or "entered email remains" in body
         or ("stays on the login page" in body and "remain" in body)
-    )
-    masked = "password" in body and (
+    ):
+        flags.add("retention")
+    if "password" in body and (
         "masked by default" in body or "masks characters" in body or "mask characters" in body
-    )
-    if login:
-        add("121216", "happy")
-        add("121229", "adhoc")
-        add("121230", "adhoc")
-        add("121231", "adhoc")
-        add("121232", "adhoc")
-        add("121233", "adhoc")
-    if email_format:
-        add("121220", "negative")
-        add("121229", "adhoc")
-        add("121231", "adhoc")
-        add("121233", "adhoc")
-    if invalid:
-        add("121221", "negative")
-        add("121222", "negative")
-    if cleared:
-        add("121222", "negative")
-    if show:
-        add("121224", "happy")
-    if hide:
-        add("121225", "happy")
-    if forgot:
-        add("121228", "happy")
-    if button_off:
-        add("121226", "negative")
-    if button_on:
-        add("121227", "happy")
-    if retention:
-        add("121220", "negative")
-        add("121221", "negative")
-    if masked:
-        add("121223", "happy")
-    return found
+    ):
+        flags.add("masked")
+    return flags
+
+
+def _case_body(test: dict) -> str:
+    return _norm(f"{test.get('title') or ''} {test.get('steps') or ''}")
+
+
+def _case_flags(test: dict) -> set[str]:
+    """Show and Forgot Password only. A shared word such as login does not count."""
+    body = _case_body(test)
+    flags: set[str] = set()
+    show = re.search(r"\bshow\b", body) is not None
+    if show and (
+        "password" in body or re.search(r"\b(?:button|toggle|control)\b", body)
+    ):
+        flags.add("show")
+    if "password" in body and ("visibility" in body or re.search(r"\bvisible\b", body)):
+        flags.add("show")
+    if (
+        "forgot password" in body
+        or "password recovery" in body
+        or "recovery page" in body
+        or "recovery url" in body
+        or "recovery route" in body
+    ):
+        flags.add("forgot")
+    return flags
+
+
+def _case_kind(test: dict, flags: set[str]) -> str:
+    body = _case_body(test)
+    if _NEGATIVE_CASE.search(body):
+        return "negative"
+    if _ADHOC_CASE.search(body) or flags >= {"show", "forgot"}:
+        return "adhoc"
+    return "happy"
 
 
 def _norm(text: str) -> str:

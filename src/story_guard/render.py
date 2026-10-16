@@ -438,7 +438,17 @@ def _template_values(
         ]
     else:
         display_scenarios = scenario_rows
-    mapping_lines = [f"Mapped ACs: {mapped_count}"]
+    scored_by_ac = {
+        str(row.get("ac_id")): row
+        for row in scored_scenarios
+        if isinstance(row, dict) and row.get("ac_id")
+    } if isinstance(scored_scenarios, list) else {}
+    model_reviewed = any(
+        isinstance(row, dict) and "model_coverage_status" in row
+        for row in scored_scenarios
+    ) if isinstance(scored_scenarios, list) else False
+    mapping_label = "Model-predicted mapped ACs" if model_reviewed else "Mapped ACs"
+    mapping_lines = [f"{mapping_label}: {mapped_count}"]
     for row in scored_scenarios if isinstance(scored_scenarios, list) else []:
         if not isinstance(row, dict):
             continue
@@ -453,12 +463,29 @@ def _template_values(
         f"Tests: {test_count}. Mapped: {mapped_count}. Bugs: {bug_count}.",
         f"Coverage by type: {', '.join(f'{key}: {value}' for key, value in coverage_by_type.items())}",
         f"Adequate: {score.get('adequate_count', 0)}; Partial: {score.get('partial_count', 0)}; None: {score.get('none_count', 0)}",
+        _quality_line(score),
         "Color key: Adequate, Partial, None.",
     ]
     ac_lines = [f"The AC field is {ac_field}.", f"Scenarios: {scenario_count}"]
     for row in display_scenarios if isinstance(display_scenarios, list) else []:
         if isinstance(row, dict):
-            ac_lines.append(f"{row.get('ac_id', '')}: {row.get('text', row.get('depth', ''))}")
+            ac_id = str(row.get("ac_id", ""))
+            scored = scored_by_ac.get(ac_id, {})
+            quality = scored.get("ac_quality") if isinstance(scored, dict) else {}
+            if not isinstance(quality, dict):
+                quality = {}
+            quality_status = str(quality.get("status") or "unavailable")
+            testable = (
+                "yes" if quality.get("testable") is True else "no"
+            ) if quality else "unavailable"
+            issues = quality.get("issues") or []
+            issue_text = "; ".join(str(issue) for issue in issues if str(issue).strip()) or "none"
+            model_status = str(scored.get("model_coverage_status") or "unavailable")
+            ac_lines.append(
+                f"{ac_id}: {row.get('text', row.get('depth', ''))} "
+                f"(quality: {quality_status}; testable: {testable}; "
+                f"quality issues: {issue_text}; model coverage status: {model_status})"
+            )
     if isinstance(coverage_by_type, dict):
         coverage_lines.append(
             f"Test count: {test_count}; mapped AC count: {mapped_count}; bug count: {bug_count}"
@@ -505,6 +532,14 @@ def _template_values(
         "raw_test_ids": _id_list([str(item) for item in test_ids]),
         "raw_bug_ids": _id_list([str(item) for item in bug_ids]),
     }
+
+
+def _quality_line(score: dict) -> str:
+    good = score.get("quality_good_count")
+    needs_review = score.get("quality_needs_review_count")
+    if isinstance(good, int) and isinstance(needs_review, int):
+        return f"AC quality: {good} good; {needs_review} need review"
+    return "AC quality: unavailable"
 
 
 def _fill_template(template: str, values: dict[str, str]) -> str:

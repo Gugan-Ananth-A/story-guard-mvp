@@ -1,26 +1,47 @@
 # Story Guard
 
-Phase 1 health report for one story. Development runs on a local model. No API key.
+Phase 1 health report for one story. The default provider is a local model; a
+hosted DeepSeek provider is also supported.
+
+For live analysis, the model reviews every acceptance criterion against each
+test suite in bounded batches. It predicts the AC-to-test links, reports AC
+quality, and the Python scorer calculates final coverage status and story
+health. Existing source-side links are not used as a shortcut.
 
 ## Model
 
-Ollama serves the model at `http://127.0.0.1:11434`. The narrative request sets `num_ctx` to **8192**. That is the context for this sprint. The model's native long window stays unused.
+Ollama serves the model at `http://127.0.0.1:11434`. Narrative and live-review requests set `num_ctx` to **8192**. Large suites are split into bounded batches so one AC review stays within the local model context. The model's native long window stays unused.
 
 | Role | Tag | Size |
 | --- | --- | --- |
-| Default | `qwen3.5:9b` | about 6.6 GB |
+| Default | `qwen3.5:4b` | about 3.3 GB |
 | Fallback | `phi4-mini` | about 2.5 GB |
 
-`phi4-mini` uses the same `num_ctx` of 8192. Pull it only when `qwen3.5:9b` will not stay resident with the editor open.
+`phi4-mini` uses the same `num_ctx` of 8192. Pull it only when `qwen3.5:4b` will not stay resident with the editor open.
 
-Load one model at a time. Do not load both. The 9B weights need about 6.6 GB, so close the other model before a generate.
+Load one model at a time. Do not load both. `qwen3.5:9b` is about 6.6 GB and does not stay resident on this 8 GB Mac, so unload it before a generate.
 
 ```bash
-ollama pull qwen3.5:9b
+ollama pull qwen3.5:4b
 python scripts/ollama_smoke.py
 ```
 
-The smoke script targets `qwen3.5:9b`, sends `num_ctx` 8192 on the request, and prints one JSON object.
+The smoke script targets `qwen3.5:4b`, sends `num_ctx` 8192 on the request, and prints one JSON object.
+
+To use DeepSeek instead of Ollama, set these values in `.env`:
+
+```bash
+STORY_GUARD_LLM=deepseek
+DEEPSEEK_API_KEY=your_api_key
+DEEPSEEK_MODEL=deepseek-chat
+```
+
+The DeepSeek path uses its `/chat/completions` endpoint, bearer authentication,
+and JSON output mode. Leave `STORY_GUARD_LLM=ollama` to keep using Qwen locally.
+
+`story-guard generate` keeps stdout limited to the final Markdown path. Progress,
+including fetch, contract validation, each AC/suite review, retries, and report
+rendering, is flushed to stderr with a `[story-guard]` prefix.
 
 ## Trace
 

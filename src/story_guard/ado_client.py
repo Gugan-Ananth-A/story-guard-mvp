@@ -3,7 +3,9 @@
 import base64
 import json
 import os
+import re
 from dataclasses import asdict, dataclass
+from html import unescape
 from datetime import datetime, timezone
 from json import JSONDecodeError
 from typing import Any, Callable, Dict, List, Optional
@@ -131,6 +133,16 @@ def _relation_work_item_id(relation: object) -> Optional[int]:
     if not target.isdigit():
         return None
     return int(target)
+
+
+def _plain_steps(value: object) -> str:
+    """Turn an Azure DevOps steps field into one line of text."""
+    if not isinstance(value, str):
+        return ""
+    text = unescape(value)
+    text = re.sub(r"(?i)<br\s*/?>", " ", text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _test_case_from_plan_row(
@@ -379,6 +391,7 @@ class ADOClient:
             self.fetch_test_cases(plan_ids, suite_id=suite_id),
             linked,
         )
+        self._attach_case_steps(story["tests"])
         story["bugs"] = _bugs_from_linked(linked, story["id"])
         return story
 
@@ -466,6 +479,24 @@ class ADOClient:
         if not isinstance(suites, list):
             raise ADOResponseError("ADO test plan suites payload is missing its value list")
         return suites
+
+    def _attach_case_steps(self, cases: List[Dict[str, Any]]) -> None:
+        """Copy plain test steps onto each case. A missing case leaves the steps blank."""
+        for case in cases:
+            if not isinstance(case, dict):
+                continue
+            case_id = str(case.get("id") or "")
+            if not case_id.isdigit():
+                case["steps"] = ""
+                continue
+            try:
+                item = self.get_work_item(int(case_id))
+            except WorkItemNotFoundError:
+                case["steps"] = ""
+                continue
+            fields = item.get("fields") if isinstance(item, dict) else None
+            raw = fields.get("Microsoft.VSTS.TCM.Steps") if isinstance(fields, dict) else ""
+            case["steps"] = _plain_steps(raw)
 
     def _cases_in_plan(self, plan_id: int, suite_id: Optional[int] = None) -> List[Dict[str, Any]]:
         suites = self._plan_suites(plan_id)

@@ -94,8 +94,11 @@ def test_generate_writes_eight_headings_and_score_pdf(tmp_path, monkeypatch, cap
     assert "No bugs." in text
     assert "partially covered" not in text
     assert "%" not in text
-    printed = capsys.readouterr().out.strip()
+    captured = capsys.readouterr()
+    printed = captured.out.strip()
     assert printed == str(report)
+    assert "[story-guard] starting generation for story 121213" in captured.err
+    assert "[story-guard] rendering Markdown and PDF reports" in captured.err
     pdf_text = pdf.read_bytes()
     for marker in (
         b"1. Portfolio Summary",
@@ -340,13 +343,135 @@ def test_live_generate_uses_ado_story_and_plan_tests(tmp_path, monkeypatch, caps
     assert "Title: Live ADO Login Screen" in report
     assert "Source: ADO dummy project" in report
     assert "Admin login needs bug review" in report
-    assert "8 acceptance criteria | 0 adequately covered | 2 with gaps | 6 not covered" in report
-    assert "Tests: 2. Mapped: 2. Bugs: 1." in report
+    assert "8 acceptance criteria | 0 adequately covered | 0 with gaps | 8 not covered" in report
+    assert "Tests: 2. Mapped: 0. Bugs: 1." in report
     assert "Password field is not accepting special characters" in report
     assert "Raw test IDs: 121216, 121228" in report
     assert "Test suites:" not in report
     assert "Suite 121215" not in report
     capsys.readouterr()
+
+
+def _case(test_id: str, title: str, steps: str = "") -> dict:
+    row = {
+        "id": test_id,
+        "title": title,
+        "type": "",
+        "mapped_ac_ids": [],
+        "last_result": "",
+        "last_result_at": None,
+        "linked_bug_ids": [],
+        "suite_id": "121215",
+        "suite_name": "Story Guard - AI Agent",
+        "suite_type": "staticTestSuite",
+        "plan_id": "121214",
+    }
+    if steps:
+        row["steps"] = steps
+    return row
+
+
+def test_live_generate_links_positive_negative_and_adhoc_before_the_report(
+    tmp_path, monkeypatch
+):
+    """Report generation maps the cases. The written mapping and the PDF use those links."""
+    from pypdf import PdfReader
+
+    from story_guard import graph
+    from story_guard.ado_client import ADOClient
+    from story_guard.analysis import result_from_judgment
+
+    raw_ac = (
+        "Scenario: AC-03 Password visibility — Show\n"
+        "Expected: When the user has entered a password and clicks Show, "
+        "the password is displayed as plain text.\n"
+        "Scenario: AC-04 Forgot Password navigation\n"
+        "Expected: When the user clicks Forgot Password?, "
+        "the user is redirected to the password recovery page.\n"
+    )
+
+    class FakeADOClient:
+        def load_live_story(self, story_id, test_plan_id=None):
+            return {
+                "id": "123086",
+                "title": "SNAP Login Screen - Admin",
+                "type": "User Story",
+                "state": "New",
+                "description": "",
+                "area": "Ecom MVP",
+                "iteration": "Ecom MVP",
+                "raw_ac_text": raw_ac,
+                "acceptance_criteria": [],
+                "tests": [
+                    _case("121224", "Verify 'Show' toggle reveals the entered password"),
+                    _case("123378", "Verify click Show button with an invalid password"),
+                    _case("123379", "Verify Show password with leading/trailing spaces"),
+                    _case("121228", "Verify navigation to the Forgot Password flow"),
+                    _case("123390", "Verify click Forgot Password with empty credentials"),
+                    _case(
+                        "123396",
+                        "Verify navigate using keyboard",
+                        "Use Tab to focus Forgot Password?. The password recovery page opens.",
+                    ),
+                ],
+                "bugs": [],
+            }
+
+    monkeypatch.setattr(ADOClient, "from_env", classmethod(lambda cls: FakeADOClient()))
+    monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
+    monkeypatch.setattr("story_guard.cli.record_success", lambda *_args: None)
+
+    def fake_analyze(record):
+        return result_from_judgment(
+            record,
+            {
+                "headline": "No open bugs.",
+                "health": "No open bugs",
+                "analysis": "The model reviewed every acceptance criterion.",
+                "reviews": [
+                    {
+                        "ac_id": "AC-03",
+                        "mapped_test_ids": ["121224", "123378", "123379"],
+                        "test_types": {
+                            "121224": "happy",
+                            "123378": "negative",
+                            "123379": "adhoc",
+                        },
+                        "coverage_status": "adequate",
+                        "quality": {"status": "good", "testable": True, "issues": []},
+                    },
+                    {
+                        "ac_id": "AC-04",
+                        "mapped_test_ids": ["121228", "123390", "123396"],
+                        "test_types": {
+                            "121228": "happy",
+                            "123390": "negative",
+                            "123396": "adhoc",
+                        },
+                        "coverage_status": "adequate",
+                        "quality": {"status": "good", "testable": True, "issues": []},
+                    },
+                ],
+            },
+            token_count=12,
+            narrative_latency_ms=5,
+        )
+
+    monkeypatch.setattr(graph, "analyze_live", fake_analyze)
+
+    assert main(["generate", "--story-id", "123086", "--live"]) == 0
+
+    report = (tmp_path / "123086.md").read_text(encoding="utf-8")
+    assert "2 adequately covered" in report
+    assert "AC-03: linked tests 121224, 123378, 123379" in report
+    assert "AC-04: linked tests 121228, 123390, 123396" in report
+    pdf_text = "\n".join(
+        page.extract_text() or "" for page in PdfReader(tmp_path / "123086.pdf").pages
+    )
+    assert "Positive scenarios are covered" in pdf_text
+    assert "Negative scenarios are covered" in pdf_text
+    assert "Adhoc scenarios are covered" in pdf_text
+    assert pdf_text.count("Adequate") >= 2
 
 
 @pytest.mark.parametrize("error_type", ["not_found", "not_story"])

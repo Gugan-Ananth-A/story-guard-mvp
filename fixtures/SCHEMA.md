@@ -28,6 +28,10 @@ Keys: `id`, `title`, `type`, `mapped_ac_ids`, `last_result`, `last_result_at`, `
 
 `mapped_ac_ids` is an array of `ac_id` strings. An empty array is a real value. It means the test maps to no `ac_id` (`docs/requirements.md` §6.4).
 
+In live analysis these source links are treated as untrusted input. The model
+reviews one AC against bounded suite batches and produces ephemeral links and
+AC-quality findings for the report; it does not mutate `mapped_ac_ids`.
+
 ## BugRecord
 
 Keys: `id`, `title`, `severity`, `priority`, `status`, `age`, `found_in`, `linked_story_id`, `linked_tc_id`, `assigned_to`, `application`, `created`.

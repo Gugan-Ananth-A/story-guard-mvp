@@ -150,9 +150,21 @@ class ADOClientTests(unittest.TestCase):
             ]
         }
 
+        login_case = {
+            "id": 121216,
+            "fields": {
+                "System.Title": "[AUTH-102065-P01] Valid login",
+                "System.WorkItemType": "Test Case",
+                "Microsoft.VSTS.TCM.Steps": "<steps><step>Click <b>Login</b></step></steps>",
+            },
+            "relations": [],
+        }
+
         def opener(request, timeout):
             url = request.full_url
-            if "/workitems/121214" in url:
+            if "/workitems/121216" in url:
+                body = login_case
+            elif "/workitems/121214" in url:
                 body = plan
             elif "/testcase?" in url:
                 body = cases
@@ -169,6 +181,8 @@ class ADOClientTests(unittest.TestCase):
         self.assertEqual(loaded["tests"][0]["title"], "[AUTH-102065-P01] Valid login")
         self.assertEqual(loaded["tests"][0]["type"], "")
         self.assertEqual(loaded["tests"][0]["mapped_ac_ids"], [])
+        self.assertEqual(loaded["tests"][0]["steps"], "Click Login")
+        self.assertEqual(loaded["tests"][1]["steps"], "")
         self.assertEqual(loaded["tests"][0]["suite_id"], "121215")
         self.assertEqual(loaded["tests"][0]["plan_id"], "121214")
         self.assertEqual(loaded["bugs"], [])

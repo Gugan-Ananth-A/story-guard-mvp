@@ -1,10 +1,12 @@
 """Code-node graph. score stops after score_health. generate continues through the report."""
 
 import html
+import inspect
 import json
 import os
 import re
 from pathlib import Path
+from collections.abc import Callable
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -21,7 +23,7 @@ from story_guard.render import (
     render_pdf as render_pdf_file,
     validate_template,
 )
-from story_guard.score import apply_behavior_links, score_health as score_record, scored_criteria
+from story_guard.score import score_health as score_record
 from story_guard.test_adapter import DummyTestAdapterError, fetch_tests
 
 # Keys and the test-type enum are the ones named in fixtures/SCHEMA.md.
@@ -86,6 +88,7 @@ class GraphState(TypedDict, total=False):
     pdf_path: str
     token_count: int
     narrative_latency_ms: int
+    progress: Callable[[str], None]
 
 
 class GateError(Exception):
@@ -98,6 +101,17 @@ class ContractError(Exception):
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
+
+
+def _notify(state: GraphState, message: str) -> None:
+    """Emit best-effort progress for interactive CLI runs."""
+    callback = state.get("progress")
+    if not callable(callback):
+        return
+    try:
+        callback(message)
+    except Exception:
+        return
 
 
 def gate_input(state: GraphState) -> dict:
@@ -121,6 +135,8 @@ def gate_input(state: GraphState) -> dict:
             raise GateError("test plan id requires --live")
     validate_template(_template_path())
     gated = {"story_id": story_id, "live": live}
+    if callable(state.get("progress")):
+        gated["progress"] = state["progress"]
     if plan_id:
         gated["test_plan_id"] = plan_id
     return gated
@@ -128,7 +144,9 @@ def gate_input(state: GraphState) -> dict:
 
 def fetch(state: GraphState) -> dict:
     if state.get("live", False):
+        _notify(state, f"fetching live story {state.get('story_id')} and test suites")
         return {"record": _fetch_live(state)}
+    _notify(state, f"loading fixture for story {state.get('story_id')}")
     path = _repo_root() / "fixtures" / "FIX-121213.json"
     try:
         text = path.read_text(encoding="utf-8")
@@ -148,6 +166,7 @@ def fetch(state: GraphState) -> dict:
     except DummyTestAdapterError as exc:
         raise ContractError(str(exc)) from exc
     fixture_record["tests"] = _tests_from_adapter(fixture_record.get("tests"), adapter_rows)
+    _notify(state, "fixture loaded")
     return {"record": fixture_record}
 
 
@@ -162,11 +181,15 @@ def _fetch_live(state: GraphState) -> dict:
     plan_id = int(plan_text) if isinstance(plan_text, str) and plan_text.isdigit() else None
     story = ADOClient.from_env().load_live_story(int(story_id), plan_id)
     record = _story_record_from_ado(story, _blank_story_record())
-    record["tests"] = apply_behavior_links(
-        scored_criteria(record),
-        list(story.get("tests") or []),
-    )
+    # Live test cases arrive with source-side links empty. AC↔test links are
+    # predicted and checked by analyze_live, one criterion at a time.
+    record["tests"] = list(story.get("tests") or [])
     record["bugs"] = list(story.get("bugs") or [])
+    _notify(
+        state,
+        f"fetched {len(record.get('acceptance_criteria') or [])} acceptance criteria, "
+        f"{len(record['tests'])} tests, and {len(record['bugs'])} bugs",
+    )
     return record
 
 
@@ -287,27 +310,40 @@ def _tests_from_adapter(fixture_tests: object, adapter_rows: list) -> list:
 
 
 def validate_contract(state: GraphState) -> dict:
+    _notify(state, "validating fetched data")
     errors = _contract_errors(state.get("record"), state.get("story_id"))
     if errors:
         raise ContractError("; ".join(errors))
+    _notify(state, "data contract valid")
     return {}
 
 
 def score_health(state: GraphState) -> dict:
     if state.get("live"):
-        result = analyze_live(state["record"])
+        record = state["record"]
+        progress = state.get("progress")
+        # Keep compatibility with integrations that replace analyze_live with
+        # a legacy one-argument test double.
+        if "progress" in inspect.signature(analyze_live).parameters:
+            result = analyze_live(record, progress=progress)
+        else:
+            result = analyze_live(record)
+        _notify(state, "live score assembled from model-predicted AC links")
         return {
+            "record": record,
             "score": result["score"],
             "narrative": result["narrative"],
             "token_count": result["token_count"],
             "narrative_latency_ms": result["narrative_latency_ms"],
         }
+    _notify(state, "calculating deterministic score")
     return {"score": score_record(state["record"])}
 
 
 def write_narrative(state: GraphState) -> dict:
-    """Offline, one narrative call over the score. Live, the analysis call already ran."""
+    """Offline, one narrative call over the score. Live, per-criterion analysis already ran."""
     if state.get("live"):
+        _notify(state, "using the validated live analysis narrative")
         narrative = state.get("narrative")
         if not isinstance(narrative, dict):
             raise NarrativeError("live analysis did not return a narrative")
@@ -316,7 +352,9 @@ def write_narrative(state: GraphState) -> dict:
             "token_count": state.get("token_count", 0),
             "narrative_latency_ms": state.get("narrative_latency_ms", 0),
         }
+    _notify(state, "asking the model for the report narrative")
     result = request_narrative(state["score"])
+    _notify(state, "narrative accepted")
     return {
         "narrative": result["narrative"],
         "token_count": result["token_count"],
@@ -326,6 +364,7 @@ def write_narrative(state: GraphState) -> dict:
 
 def render_pdf(state: GraphState) -> dict:
     """Write both reports from the same score, narrative, and fixture record."""
+    _notify(state, "rendering Markdown and PDF reports")
     if not state.get("live"):
         _validate_narrative_counts(state["score"], state["narrative"])
     output_dir = artifacts_dir()
@@ -346,6 +385,7 @@ def render_pdf(state: GraphState) -> dict:
         markdown_path,
         record=state.get("record"),
     )
+    _notify(state, f"reports written to {markdown_path} and {pdf_path}")
     return {"markdown_path": str(markdown_path), "pdf_path": str(pdf_path)}
 
 

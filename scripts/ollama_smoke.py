@@ -10,7 +10,7 @@ import urllib.error
 import urllib.request
 
 HOST = "http://127.0.0.1:11434"
-MODEL = "qwen3.5:9b"
+MODEL = "qwen3.5:4b"
 NUM_CTX = 8192
 
 PROMPT = 'Return one JSON object with a single key "ok" set to true.'
@@ -21,7 +21,7 @@ def main() -> int:
         "model": MODEL,
         "stream": False,
         "format": "json",
-        "think": True,
+        "think": False,
         "messages": [{"role": "user", "content": PROMPT}],
         "options": {"num_ctx": NUM_CTX},
     }
@@ -37,10 +37,18 @@ def main() -> int:
     except urllib.error.URLError as exc:
         print(f"ollama smoke failed: {exc}", file=sys.stderr)
         return 1
-    content = body.get("message", {}).get("content", "")
-    try:
-        obj = json.loads(content)
-    except json.JSONDecodeError:
+    message = body.get("message", {})
+    candidates = [message.get("content", ""), message.get("thinking", "")]
+    obj = None
+    for content in candidates:
+        if not isinstance(content, str) or not content.strip():
+            continue
+        try:
+            obj = json.loads(content)
+            break
+        except json.JSONDecodeError:
+            continue
+    if obj is None:
         print("ollama smoke failed: response was not JSON", file=sys.stderr)
         return 1
     if not isinstance(obj, dict):

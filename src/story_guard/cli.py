@@ -54,9 +54,15 @@ def _score(story_id: str) -> int:
 def _generate(story_id: str, live: bool, test_plan_id: str = "") -> int:
     from story_guard.ado_client import ADOClientError
 
-    state_in = {"story_id": story_id, "live": live}
+    def progress(message: str) -> None:
+        # Keep stdout reserved for the final Markdown path so shell scripts
+        # can continue to consume it. Flush each line for long live calls.
+        print(f"[story-guard] {message}", file=sys.stderr, flush=True)
+
+    state_in = {"story_id": story_id, "live": live, "progress": progress}
     if test_plan_id:
         state_in["test_plan_id"] = test_plan_id
+    progress(f"starting {'live ' if live else ''}generation for story {story_id}")
     try:
         state = run_generate(state_in)
     except (GateError, ContractError, NarrativeError, RenderError, ADOClientError) as exc:

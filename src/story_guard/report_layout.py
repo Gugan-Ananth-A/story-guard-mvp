@@ -701,15 +701,25 @@ def _actions(narrative: dict | None) -> list[tuple[str, str]]:
 
 
 def _depth_and_gap(row: dict) -> tuple[str, str, str]:
-    """Paint the row status. A gap string cannot reclassify an adequate or partial row."""
+    """Paint coverage and include the model's AC-quality assessment."""
     status = str(row.get("row_status") or "")
     gap = str(row.get("gap") or "")
     depth = str(row.get("depth") or "")
+    quality = row.get("ac_quality")
+    if isinstance(quality, dict):
+        quality_status = str(quality.get("status") or "unavailable")
+        issues = quality.get("issues") or []
+        issue_text = "; ".join(str(issue) for issue in issues if str(issue).strip())
+        quality_line = f"AC quality: {quality_status}"
+        if issue_text:
+            quality_line += f" ({issue_text})"
+    else:
+        quality_line = "AC quality: unavailable"
     if status == "none":
-        return "None", "No coverage", "none"
+        return "None", f"No coverage\n{quality_line}", "none"
     if status == "adequate":
-        return _numbered(depth), "Adequate", "adequate"
-    return _numbered(depth), _numbered(gap), "partial"
+        return _numbered(depth), f"Adequate\n{quality_line}", "adequate"
+    return _numbered(depth), _numbered(gap) + f"\n{quality_line}", "partial"
 
 
 def _numbered(text: str) -> str:

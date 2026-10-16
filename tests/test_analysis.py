@@ -137,42 +137,72 @@ def test_a_long_analysis_is_kept_as_separate_sentences():
     assert observations[-1] == "The rejected work is not in this record."
 
 
-def test_ollama_receives_evaluation_instructions(monkeypatch):
-    captured = {}
+def _pair_reply(ac_id="AC-02", ids=None):
+    mapped = ["121220"] if ids is None else list(ids)
+    if mapped:
+        finding = f"{ac_id} is checked by {', '.join(mapped)}."
+    else:
+        finding = f"No listed test checks {ac_id}."
+    return {"ac_id": ac_id, "mapped_test_ids": mapped, "finding": finding}
+
+
+def test_ollama_judges_one_criterion_against_one_suite(monkeypatch):
+    captured = []
 
     def fake_chat(messages, num_predict=8192):
-        captured["messages"] = messages
-        captured["num_predict"] = num_predict
+        captured.append({"messages": messages, "num_predict": num_predict})
+        payload = json.loads(messages[1]["content"].split("\n", 1)[1])
+        ac_id = payload["acceptance_criterion"]["ac_id"]
+        test_ids = [test["id"] for test in payload["tests"]]
+        ids = [test_ids[0]] if ac_id == "AC-01" else [test_ids[-1]]
         return {
-            "message": {"content": json.dumps(_judgment())},
+            "message": {
+                "content": json.dumps(
+                    {
+                        **_pair_reply(ac_id, ids),
+                        "coverage_status": "partial",
+                        "quality": {"status": "good", "testable": True, "issues": []},
+                    }
+                )
+            },
             "prompt_eval_count": 3,
             "eval_count": 4,
         }
 
     monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
-    analyze_live(_record())
+    result = analyze_live(_record())
 
-    system = captured["messages"][0]["content"]
-    user = captured["messages"][1]["content"]
-    assert "Evaluate every acceptance criterion" in user
-    assert '"open":true' in user
-    assert '"mapped_ac_ids":["AC-01"]' in user
+    assert len(captured) == 2
+    system = captured[0]["messages"][0]["content"]
+    user = captured[0]["messages"][1]["content"]
+    assert "Judge this one acceptance criterion against every test in this one suite batch." in user
+    assert "Admin signs in" in user
+    assert "Admin is rejected" not in user
+    assert "mapped_ac_ids" not in user
+    assert "Valid login" in user
+    assert "Bad password" in user
+    assert "122590" not in user
     assert "How to judge coverage" in system
-    assert "How to judge health" in system
-    assert "Coverage does not change health" in system
-    assert "An open P1 sets health to Critical" in system
-    assert "an open P2 sets health to High" in system
+    assert "one acceptance criterion and one suite" in system
+    assert 'Sharing a word such as "login" is not enough.' in system
     assert "no listed test checks" in system
     assert "Do not use a percent sign" in system
     assert "partially covered" in system
-    assert "one review" in system.lower() or "every object in acceptance_criteria" in system
-    assert "Return one review only for these ac ids: AC-02" in user
-    assert "six to ten sentences" in system
-    assert "six to ten sentences" in user
-    assert captured["num_predict"] == 3456
+    assert "Coverage does not change health" in system
+    assert "quality" in system
+    assert captured[0]["num_predict"] == 2048
+    assert captured[1]["num_predict"] == 2048
+    rows = {row["ac_id"]: row for row in result["score"]["scenarios"]}
+    assert rows["AC-01"]["mapped_test_ids"] == ["121216"]
+    assert rows["AC-02"]["mapped_test_ids"] == ["121220"]
+    assert result["score"]["health"] == "High"
+    assert result["narrative"]["headline"] == (
+        "Open P2 bug 122590: Password field is not accepting special characters."
+    )
+    assert "122590" in " ".join(result["narrative"]["observations"])
 
 
-def test_analyze_live_retries_an_invalid_health(monkeypatch):
+def test_analyze_live_retries_an_invalid_review(monkeypatch):
     calls = {"n": 0}
 
     def fake_chat(messages, num_predict=8192):
@@ -181,7 +211,8 @@ def test_analyze_live_retries_an_invalid_health(monkeypatch):
             content = json.dumps({"health": "Green"})
         else:
             assert "previous JSON was rejected" in messages[-1]["content"]
-            content = json.dumps(_judgment())
+            payload = json.loads(messages[1]["content"].split("\n", 1)[1])
+            content = json.dumps(_pair_reply(payload["acceptance_criterion"]["ac_id"]))
         return {
             "message": {"content": content},
             "prompt_eval_count": 3,
@@ -189,14 +220,16 @@ def test_analyze_live_retries_an_invalid_health(monkeypatch):
         }
 
     monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
-    result = analyze_live(_record())
+    record = _record()
+    record["acceptance_criteria"] = [record["acceptance_criteria"][1]]
+    result = analyze_live(record)
 
     assert calls["n"] == 2
     assert result["score"]["health"] == "High"
     assert result["token_count"] == 7
 
 
-def test_explicit_link_survives_a_none_review():
+def test_model_review_can_reject_a_source_link():
     from story_guard.score import apply_explicit_links
 
     record = _record()
@@ -247,27 +280,28 @@ def test_explicit_link_survives_a_none_review():
     row = result["score"]["scenarios"][0]
 
     assert row["ac_id"] == "AC-11"
-    assert row["row_status"] == "partial"
-    assert row["mapped_test_ids"] == ["121220", "121221"]
-    assert result["score"]["none_count"] == 0
+    assert row["row_status"] == "none"
+    assert row["mapped_test_ids"] == []
+    assert result["score"]["none_count"] == 1
     assert result["narrative"]["observations"][0] == "Story health - No open bugs"
 
 
-def test_fully_linked_story_asks_for_no_reviews(monkeypatch):
+def test_fully_linked_story_is_still_reviewed_by_the_model(monkeypatch):
     from story_guard.score import apply_explicit_links
 
-    captured = {}
+    calls = []
 
     def fake_chat(messages, num_predict=8192):
-        captured["messages"] = messages
-        captured["num_predict"] = num_predict
-        body = _judgment()
-        body["health"] = "No open bugs"
-        body["reviews"] = []
+        calls.append(messages)
+        payload = json.loads(messages[1]["content"].split("\n", 1)[1])
         return {
-            "message": {"content": json.dumps(body)},
-            "prompt_eval_count": 1,
-            "eval_count": 2,
+            "message": {
+                "content": json.dumps(
+                    _pair_reply(payload["acceptance_criterion"]["ac_id"], ["121220"])
+                )
+            },
+            "prompt_eval_count": 3,
+            "eval_count": 4,
         }
 
     record = _record()
@@ -293,12 +327,123 @@ def test_fully_linked_story_asks_for_no_reviews(monkeypatch):
     )
     monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
     result = analyze_live(record)
-    user = captured["messages"][1]["content"]
 
-    assert "reviews must be []" in user
-    assert "invalid email format" not in user
-    assert captured["num_predict"] == 3072
     assert result["score"]["scenarios"][0]["mapped_test_ids"] == ["121220"]
+    assert result["narrative"]["headline"] == "No open bugs."
+    assert len(calls) == 1
+    assert result["token_count"] == 7
+
+
+def test_each_criterion_is_judged_against_each_suite(monkeypatch):
+    calls = []
+
+    def fake_chat(messages, num_predict=8192):
+        user = messages[1]["content"]
+        payload = json.loads(user.split("\n", 1)[1])
+        ac_id = payload["acceptance_criterion"]["ac_id"]
+        suite_id = payload["suite"]["id"]
+        test_ids = [item["id"] for item in payload["tests"]]
+        calls.append((ac_id, suite_id, test_ids))
+        if suite_id == "S1":
+            assert "Bad password" not in user
+        if suite_id == "S2":
+            assert "Valid login" not in user
+        if ac_id == "AC-01":
+            assert "Admin is rejected" not in user
+        chosen = test_ids[:1]
+        return {
+            "message": {
+                "content": json.dumps(
+                    {
+                        "ac_id": ac_id,
+                        "mapped_test_ids": chosen,
+                        "finding": f"{ac_id} is checked by {chosen[0]}.",
+                    }
+                )
+            },
+            "prompt_eval_count": 1,
+            "eval_count": 1,
+        }
+
+    record = _record()
+    record["bugs"] = []
+    record["acceptance_criteria"] = [
+        {"ac_id": "AC-01", "text": "Admin signs in", "testable": True, "flags": []},
+        {"ac_id": "AC-02", "text": "Admin is rejected", "testable": True, "flags": []},
+    ]
+    record["tests"] = [
+        {
+            "id": "121216",
+            "title": "Valid login",
+            "type": "happy",
+            "mapped_ac_ids": [],
+            "suite_id": "S1",
+            "suite_name": "Suite One",
+        },
+        {
+            "id": "121217",
+            "title": "Empty email",
+            "type": "negative",
+            "mapped_ac_ids": [],
+            "suite_id": "S1",
+            "suite_name": "Suite One",
+        },
+        {
+            "id": "121220",
+            "title": "Bad password",
+            "type": "negative",
+            "mapped_ac_ids": [],
+            "suite_id": "S2",
+            "suite_name": "Suite Two",
+        },
+    ]
+    monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
+    result = analyze_live(record)
+    rows = {row["ac_id"]: row for row in result["score"]["scenarios"]}
+
+    assert calls == [
+        ("AC-01", "S1", ["121216", "121217"]),
+        ("AC-01", "S2", ["121220"]),
+        ("AC-02", "S1", ["121216", "121217"]),
+        ("AC-02", "S2", ["121220"]),
+    ]
+    assert rows["AC-01"]["mapped_test_ids"] == ["121216", "121220"]
+    assert rows["AC-02"]["mapped_test_ids"] == ["121216", "121220"]
+    assert result["token_count"] == 8
+    assert result["narrative"]["headline"] == "No open bugs."
+
+
+def test_a_criterion_with_no_tests_still_gets_a_quality_review(monkeypatch):
+    calls = []
+
+    def fake_chat(messages, num_predict=8192):
+        calls.append(messages)
+        payload = json.loads(messages[1]["content"].split("\n", 1)[1])
+        return {
+            "message": {
+                "content": json.dumps(
+                    _pair_reply(payload["acceptance_criterion"]["ac_id"], [])
+                )
+            },
+            "prompt_eval_count": 3,
+            "eval_count": 4,
+        }
+
+    record = _record()
+    record["bugs"] = []
+    record["tests"] = []
+    record["acceptance_criteria"] = [
+        {"ac_id": "AC-01", "text": "Admin signs in", "testable": True, "flags": []},
+    ]
+    monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
+    result = analyze_live(record)
+    row = result["score"]["scenarios"][0]
+
+    assert row["row_status"] == "none"
+    assert row["mapped_test_ids"] == []
+    assert "No listed test checks AC-01." in result["narrative"]["observations"]
+    assert len(calls) == 1
+    assert result["token_count"] == 7
 
 
 def test_slow_analysis_retries_with_a_shorter_limit(monkeypatch):
@@ -310,16 +455,23 @@ def test_slow_analysis_retries_with_a_shorter_limit(monkeypatch):
         calls.append((num_predict, messages[-1]["content"]))
         if len(calls) == 1:
             raise NarrativeError("narrative exceeded 60 seconds of generation")
+        payload = json.loads(messages[1]["content"].split("\n", 1)[1])
         return {
-            "message": {"content": json.dumps(_judgment())},
+            "message": {
+                "content": json.dumps(
+                    _pair_reply(payload["acceptance_criterion"]["ac_id"])
+                )
+            },
             "prompt_eval_count": 1,
             "eval_count": 2,
         }
 
     monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
-    result = analyze_live(_record())
+    record = _record()
+    record["acceptance_criteria"] = [record["acceptance_criteria"][1]]
+    result = analyze_live(record)
 
-    assert calls[0][0] == 3456
-    assert calls[1][0] == 1728
+    assert calls[0][0] == 2048
+    assert calls[1][0] == 1024
     assert "too long" in calls[1][1]
     assert result["score"]["health"] == "High"
