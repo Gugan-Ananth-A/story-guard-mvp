@@ -413,21 +413,9 @@ def test_each_criterion_is_judged_against_each_suite(monkeypatch):
     assert result["narrative"]["headline"] == "No open bugs."
 
 
-def test_a_criterion_with_no_tests_still_gets_a_quality_review(monkeypatch):
-    calls = []
-
+def test_a_story_with_no_fetched_tests_makes_no_model_call(monkeypatch):
     def fake_chat(messages, num_predict=8192):
-        calls.append(messages)
-        payload = json.loads(messages[1]["content"].split("\n", 1)[1])
-        return {
-            "message": {
-                "content": json.dumps(
-                    _pair_reply(payload["acceptance_criterion"]["ac_id"], [])
-                )
-            },
-            "prompt_eval_count": 3,
-            "eval_count": 4,
-        }
+        raise AssertionError("model call")
 
     record = _record()
     record["bugs"] = []
@@ -441,9 +429,65 @@ def test_a_criterion_with_no_tests_still_gets_a_quality_review(monkeypatch):
 
     assert row["row_status"] == "none"
     assert row["mapped_test_ids"] == []
+    assert row["ac_quality"]["status"] == "needs_improvement"
     assert "No listed test checks AC-01." in result["narrative"]["observations"]
-    assert len(calls) == 1
-    assert result["token_count"] == 7
+    assert result["token_count"] == 0
+    assert result["score"]["test_count"] == 0
+    assert result["narrative"]["headline"] == "No open bugs."
+
+
+def test_calls_for_one_story_do_not_overlap(monkeypatch):
+    state = {"in_flight": 0, "max_in_flight": 0, "calls": 0}
+
+    def fake_chat(messages, num_predict=8192):
+        state["in_flight"] += 1
+        state["max_in_flight"] = max(state["max_in_flight"], state["in_flight"])
+        state["calls"] += 1
+        try:
+            payload = json.loads(messages[1]["content"].split("\n", 1)[1])
+            ac_id = payload["acceptance_criterion"]["ac_id"]
+            suite_id = payload["suite"]["id"]
+            assert len(payload["tests"]) >= 1
+            assert suite_id in {"S1", "S2"}
+            return {
+                "message": {
+                    "content": json.dumps(
+                        _pair_reply(ac_id, [payload["tests"][0]["id"]])
+                    )
+                },
+                "prompt_eval_count": 1,
+                "eval_count": 1,
+            }
+        finally:
+            state["in_flight"] -= 1
+
+    record = _record()
+    record["bugs"] = []
+    record["tests"] = [
+        {
+            "id": "900001",
+            "title": "Valid login",
+            "type": "happy",
+            "mapped_ac_ids": [],
+            "suite_id": "S1",
+            "suite_name": "Suite One",
+        },
+        {
+            "id": "900002",
+            "title": "Bad password",
+            "type": "negative",
+            "mapped_ac_ids": [],
+            "suite_id": "S2",
+            "suite_name": "Suite Two",
+        },
+    ]
+    monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
+    result = analyze_live(record)
+
+    assert state["calls"] == 4
+    assert state["max_in_flight"] == 1
+    assert result["score"]["test_count"] == 2
+    assert {row["ac_id"] for row in result["score"]["scenarios"]} == {"AC-01", "AC-02"}
 
 
 def test_slow_analysis_retries_with_a_shorter_limit(monkeypatch):
@@ -475,3 +519,69 @@ def test_slow_analysis_retries_with_a_shorter_limit(monkeypatch):
     assert calls[1][0] == 1024
     assert "too long" in calls[1][1]
     assert result["score"]["health"] == "High"
+
+
+def test_live_review_calls_qwen35_4b(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "ollama")
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen3.5:4b")
+    seen = {}
+
+    class _Body:
+        def __init__(self, raw: bytes):
+            self._raw = raw
+
+        def read(self, _n=-1):
+            return self._raw
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def fake_urlopen(request, timeout):
+        seen["url"] = request.full_url
+        seen["body"] = json.loads(request.data.decode("utf-8"))
+        payload = json.loads(seen["body"]["messages"][1]["content"].split("\n", 1)[1])
+        ac_id = payload["acceptance_criterion"]["ac_id"]
+        content = json.dumps(
+            {
+                "ac_id": ac_id,
+                "mapped_test_ids": ["42"],
+                "test_types": {"42": "happy"},
+                "coverage_status": "partial",
+                "quality": {"status": "good", "testable": True, "issues": []},
+                "finding": "AC-01 is checked by 42.",
+            }
+        )
+        raw = json.dumps(
+            {
+                "message": {"role": "assistant", "content": content},
+                "prompt_eval_count": 5,
+                "eval_count": 6,
+            }
+        ).encode("utf-8")
+        return _Body(raw)
+
+    record = _record()
+    record["bugs"] = []
+    record["acceptance_criteria"] = [record["acceptance_criteria"][0]]
+    record["tests"] = [
+        {
+            "id": "42",
+            "title": "Admin signs in with a valid password",
+            "type": "",
+            "mapped_ac_ids": [],
+            "suite_id": "S9",
+            "suite_name": "Admin suite",
+        }
+    ]
+    monkeypatch.setattr("story_guard.narrative.urllib.request.urlopen", fake_urlopen)
+    result = analyze_live(record)
+
+    assert seen["url"].endswith("/api/chat")
+    assert seen["body"]["model"] == "qwen3.5:4b"
+    assert seen["body"]["format"] == "json"
+    assert seen["body"]["think"] is False
+    assert seen["body"]["options"]["num_ctx"] == 8192
+    assert result["score"]["scenarios"][0]["mapped_test_ids"] == ["42"]

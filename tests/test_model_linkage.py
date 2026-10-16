@@ -108,37 +108,26 @@ def test_every_ac_is_checked_against_every_suite_and_quality_is_reported(monkeyp
     assert result["token_count"] == 20
 
 
-def test_empty_test_pack_still_gets_an_ac_quality_review(monkeypatch):
+def test_empty_test_pack_renders_without_a_model_call(monkeypatch):
     record = _record()
     record["tests"] = []
-    calls = []
 
     def fake_chat(messages, num_predict=8192):
-        payload = json.loads(messages[1]["content"].split("\n", 1)[1])
-        calls.append(payload)
-        ac_id = payload["acceptance_criterion"]["ac_id"]
-        return {
-            "message": {
-                "content": json.dumps(
-                    {
-                        "ac_id": ac_id,
-                        "mapped_test_ids": [],
-                        "coverage_status": "none",
-                        "quality": {"status": "poor", "testable": False, "issues": ["Too vague"]},
-                        "finding": f"No listed test checks {ac_id}.",
-                    }
-                )
-            },
-            "prompt_eval_count": 1,
-            "eval_count": 1,
-        }
+        raise AssertionError("model call")
 
     monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
     result = analyze_live(record)
+    rows = result["score"]["scenarios"]
 
-    assert len(calls) == 2
-    assert all(payload["tests"] == [] for payload in calls)
-    assert all(row["ac_quality"]["status"] == "poor" for row in result["score"]["scenarios"])
+    assert result["score"]["test_count"] == 0
+    assert result["score"]["none_count"] == 2
+    assert result["token_count"] == 0
+    assert all(row["row_status"] == "none" for row in rows)
+    assert all(row["mapped_test_ids"] == [] for row in rows)
+    assert all(row["ac_quality"]["status"] for row in rows)
+    assert result["narrative"]["headline"] == "No open bugs."
+    assert "No listed test checks AC-01." in result["narrative"]["observations"]
+    assert "No listed test checks AC-02." in result["narrative"]["observations"]
 
 
 def test_report_template_values_include_model_linkage_and_ac_quality():

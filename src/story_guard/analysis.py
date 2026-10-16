@@ -9,6 +9,7 @@ not used as a shortcut for live analysis.
 
 import json
 import re
+import threading
 import time
 from collections.abc import Callable
 
@@ -74,6 +75,8 @@ How to judge coverage. This call is one acceptance criterion and one suite batch
 """
 
 Progress = Callable[[str], None]
+# One resident model. A second live-review call waits until the first returns.
+_MODEL_CALL = threading.Lock()
 
 
 def _notify(progress: Progress | None, message: str) -> None:
@@ -94,10 +97,17 @@ def analyze_live(record: dict, progress: Progress | None = None) -> dict:
         raise NarrativeError("story record is not an object")
     criteria = _criteria_to_judge(record)
     suites = _test_suite_batches(record)
-    _notify(
-        progress,
-        f"live review started: {len(criteria)} acceptance criteria across {len(suites)} suite batches",
-    )
+    if suites:
+        started = (
+            f"live review started: {len(criteria)} acceptance criteria "
+            f"across {len(suites)} suite batches"
+        )
+    else:
+        started = (
+            f"live review started: {len(criteria)} acceptance criteria "
+            "and no fetched tests"
+        )
+    _notify(progress, started)
     reviews, findings, token_count, latency_ms = _judge_criteria(
         record, criteria, 0, progress, suites
     )
@@ -222,7 +232,8 @@ def _judge_pair(
             messages.append({"role": "user", "content": correction})
         started = time.perf_counter()
         try:
-            response = ollama_chat(messages, num_predict=budget)
+            with _MODEL_CALL:
+                response = ollama_chat(messages, num_predict=budget)
             _check_cap(response)
             body = _load_response_json(response, "analysis")
             pair = _require_pair(body, criterion, tests)
@@ -315,10 +326,7 @@ def _test_suite_batches(record: dict) -> list[tuple[str, str, list[dict]]]:
             current_chars += size
         if current:
             batches.append((suite_id, suite_name, current))
-    if not batches:
-        # A missing test pack still gets an AC-quality review. The empty suite
-        # makes the absence of coverage explicit without inventing a case.
-        return [("tests", "No test suite", [])]
+    # No fetched tests means no model call. The scorer still builds none rows.
     return batches
 
 

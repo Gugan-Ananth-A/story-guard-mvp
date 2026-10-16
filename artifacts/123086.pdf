@@ -89,7 +89,7 @@ Q
 q
 1 0 0 1 459.2177 10 cm
 q
-BT 1 0 0 1 0 25 Tm 240.8401 0 Td 11 TL /F1 8 Tf 1 1 1 rg (Project: Ecom MVP) Tj  T* -27.6 0 Td (Generated on: 14 Oct 2026) Tj  T* 27.144 0 Td (Stories assessed: 1) Tj T* -240.3841 0 Td ET
+BT 1 0 0 1 0 25 Tm 240.8401 0 Td 11 TL /F1 8 Tf 1 1 1 rg (Project: Ecom MVP) Tj  T* -27.6 0 Td (Generated on: 16 Oct 2026) Tj  T* 27.144 0 Td (Stories assessed: 1) Tj T* -240.3841 0 Td ET
 Q
 Q
 q
@@ -264,7 +264,7 @@ endstream
 endobj
 12 0 obj
 <<
-/Length 11020
+/Length 10835
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -276,12 +276,12 @@ BT 1 0 0 1 0 2.5 Tm /F2 12.5 Tf 15 TL (1. Portfolio Summary) Tj T* ET
 Q
 Q
 q
-1 0 0 1 30.24 42.89559 cm
+1 0 0 1 30.24 44.89559 cm
 q
 0 0 0 rg
 BT /F1 10 Tf 12 TL ET
 q
-1 0 0 1 0 333.9 cm
+1 0 0 1 0 331.9 cm
 q
 .105882 .211765 .364706 rg
 n 0 169 346 -14 re f*
@@ -485,118 +485,112 @@ Q
 Q
 Q
 q
-1 0 0 1 366 489.9 cm
+1 0 0 1 366 487.9 cm
 q
 .105882 .211765 .364706 rg
 BT 1 0 0 1 0 3 Tm /F2 10 Tf 13 TL (Key Observations) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 476.4 cm
+1 0 0 1 366 474.4 cm
 q
 BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Story health - Medium) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 463.9 cm
+1 0 0 1 366 461.9 cm
 q
-BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( 4 acceptance criteria, 0 adequately covered, 4 with gaps, 0 not covered.) Tj T* ET
+BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( 4 acceptance criteria, 0 adequately covered, 3 with gaps, 1 not covered.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 451.4 cm
+1 0 0 1 366 449.4 cm
 q
-BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( 41 tests and 27 mapped.) Tj T* ET
+BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( 41 tests and 15 mapped.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 438.9 cm
+1 0 0 1 366 436.9 cm
 q
 BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( 4 bugs, with 1 open.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 426.4 cm
+1 0 0 1 366 424.4 cm
 q
 BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Criteria with gaps: AC-01, AC-02, AC-03, AC-04.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 413.9 cm
+1 0 0 1 366 411.9 cm
 q
 BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Bug 122590 is closed and does not set health.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 401.4 cm
+1 0 0 1 366 399.4 cm
 q
 BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Open bug 122594 \(P3\) remains: Sign in screen has UI issue.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 388.9 cm
+1 0 0 1 366 386.9 cm
 q
 BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Bug 122595 is closed and does not set health.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 376.4 cm
+1 0 0 1 366 374.4 cm
 q
 BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Bug 122592 is closed and does not set health.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 342.9 cm
+1 0 0 1 366 351.4 cm
 q
-BT 1 0 0 1 2 23.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Tests 121229, 121230, and 121232 check successful authentication with valid credentials and dashboard redirect) Tj T* (or session persistence, but none directly verifies the standard registered-email-plus-correct-password login and) Tj T* (redirect to the SNAP dashboard/home page.) Tj T* ET
+BT 1 0 0 1 2 13 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( No tests in this suite check the successful login flow with valid credentials and redirection to the SNAP dashboard;) Tj T* (only validation error scenarios are covered.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 319.9 cm
+1 0 0 1 366 328.4 cm
 q
-BT 1 0 0 1 2 13 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( No listed test checks successful login with valid credentials or the redirect to the SNAP dashboard; all tests cover) Tj T* (the Forgot Password recovery flow.) Tj T* ET
+BT 1 0 0 1 2 13 Tm -0.062162 Tw 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( No tests in this suite check the successful login behavior or redirection to the SNAP dashboard; all listed tests focus) Tj T* 0 Tw (on password recovery and session management.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 296.9 cm
+1 0 0 1 366 305.4 cm
 q
-BT 1 0 0 1 2 13 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Tests 121221 and 121222 verify that an unregistered email and a registered email with a wrong password both) Tj T* (show an invalid credentials error and keep the user on the login page, matching the criterion.) Tj T* ET
+BT 1 0 0 1 2 13 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Test 121221 checks the error message for an unregistered email and that the user stays on the login page, but it) Tj T* (does not verify the behavior for a registered email with a wrong password.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 273.9 cm
+1 0 0 1 366 282.4 cm
 q
-BT 1 0 0 1 2 13 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( No listed test checks invalid-credential login errors or staying on the login page; all tests cover Forgot Password) Tj T* (navigation instead.) Tj T* ET
+BT 1 0 0 1 2 13 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( No tests in this suite check the specific behavior of invalid credentials \(unregistered email or wrong password\)) Tj T* (causing an error message and staying on the login page.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 240.4 cm
+1 0 0 1 366 259.4 cm
 q
-BT 1 0 0 1 2 23.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Tests 121224, 123378, 123379, 123381, 123382, 123384, 123385, 123386, 123387, 123388, and 123389 verify) Tj T* (that clicking Show after entering a password reveals it as plain text, including edge cases, keyboard access, and) Tj T* (cross-browser behavior, so the criterion is fully covered.) Tj T* ET
+BT 1 0 0 1 2 13 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Tests 121224, 123364, and 123378 verify that clicking Show displays the password as plain text, though test) Tj T* (123364 covers an edge case with an empty field.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 217.4 cm
+1 0 0 1 366 236.4 cm
 q
-BT 1 0 0 1 2 13 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Test 123402 enters a password and clicks Show but only verifies that Forgot Password navigation still works, so it) Tj T* (does not check that the password is displayed as plain text.) Tj T* ET
+BT 1 0 0 1 2 13 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Test 123402 verifies that clicking Show displays the password as plain text before navigating to the recovery page,) Tj T* (which is the only test addressing this behavior.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 204.9 cm
+1 0 0 1 366 213.4 cm
 q
-BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Test 121228 clicks the Forgot Password?) Tj T* ET
-Q
-Q
-q
-1 0 0 1 366 192.4 cm
-q
-BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( link and verifies redirection to the password recovery page, matching the criterion) Tj (') Tj (s behavior and expected result.) Tj T* ET
+BT 1 0 0 1 2 13 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Test 121228 verifies the ') Tj (Forgot Password?) Tj (' link click and page redirection but does not confirm the specific) Tj T* (destination URL or recovery page content.) Tj T* ET
 Q
 Q
 q
 1 0 0 1 366 179.9 cm
 q
-BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( AC-04 is checked by 123390, 123391, 123394, 123395, 123396, 123397, 123399, 123401, 123402.) Tj T* ET
+BT 1 0 0 1 2 23.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( The named tests verify that clicking the Forgot Password link redirects to the password recovery page under) Tj T* (various conditions including empty credentials, invalid credentials, keyboard activation, and direct URL access, while) Tj T* (missing specific validation for successful login credentials.) Tj T* ET
 Q
 Q
 q
@@ -615,19 +609,19 @@ Q
 q
 1 0 0 1 366 136.9 cm
 q
-BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( QA: Close the coverage gap on AC-01. No Negative scenarios Covered; No Adhoc scenarios Covered.) Tj T* ET
+BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( QA: Close the coverage gap on AC-01. No coverage.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 366 124.4 cm
+1 0 0 1 366 113.9 cm
 q
-BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( QA: Close the coverage gap on AC-02. No Positive scenarios Covered; No Adhoc scenarios Covered.) Tj T* ET
+BT 1 0 0 1 2 13 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( QA: Close the coverage gap on AC-02. No Positive scenarios Covered; No Negative scenarios Covered; No Adhoc) Tj T* (scenarios Covered.) Tj T* ET
 Q
 Q
 q
 1 0 0 1 366 101.4 cm
 q
-BT 1 0 0 1 2 13 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( QA: Close the coverage gap on AC-03. No Positive scenarios Covered; No Negative scenarios Covered; No Adhoc) Tj T* (scenarios Covered.) Tj T* ET
+BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( QA: Close the coverage gap on AC-03. No Adhoc scenarios Covered.) Tj T* ET
 Q
 Q
 q
@@ -748,7 +742,7 @@ endstream
 endobj
 13 0 obj
 <<
-/Length 17485
+/Length 17398
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -1090,70 +1084,70 @@ Q
 q
 1 0 0 1 36.24 392.1956 cm
 q
-BT 1 0 0 1 0 2.5 Tm 10.5 TL /F1 8 Tf .141176 .192157 .25098 rg (4 acceptance criteria | ) Tj .121569 .541176 .298039 rg (0 adequately covered) Tj .141176 .192157 .25098 rg ( | ) Tj .784314 .537255 .117647 rg (4 with gaps) Tj .141176 .192157 .25098 rg ( | ) Tj .839216 .270588 .270588 rg (0 not covered) Tj T* ET
+BT 1 0 0 1 0 2.5 Tm 10.5 TL /F1 8 Tf .141176 .192157 .25098 rg (4 acceptance criteria | ) Tj .121569 .541176 .298039 rg (0 adequately covered) Tj .141176 .192157 .25098 rg ( | ) Tj .784314 .537255 .117647 rg (3 with gaps) Tj .141176 .192157 .25098 rg ( | ) Tj .839216 .270588 .270588 rg (1 not covered) Tj T* ET
 Q
 Q
 q
 1 0 0 1 36.24 387.1956 cm
 Q
 q
-1 0 0 1 30.24 228.7956 cm
+1 0 0 1 30.24 245.9956 cm
 q
 .105882 .211765 .364706 rg
-n 0 158.4 781.4098 -14 re f*
+n 0 141.2 781.4098 -14 re f*
+.992157 .909804 .917647 rg
+n 58 127.2 723.4098 -23.2 re f*
 1 .952941 .839216 rg
-n 58 144.4 723.4098 -31.8 re f*
+n 58 104 723.4098 -40.4 re f*
 1 .952941 .839216 rg
-n 58 112.6 723.4098 -31.8 re f*
-1 .952941 .839216 rg
-n 58 80.8 723.4098 -40.4 re f*
+n 58 63.6 723.4098 -23.2 re f*
 1 .952941 .839216 rg
 n 58 40.4 723.4098 -40.4 re f*
 0 0 0 rg
 BT /F1 10 Tf 12 TL ET
 q
-1 0 0 1 4 147.4 cm
+1 0 0 1 4 130.2 cm
 q
 1 1 1 rg
 BT 1 0 0 1 0 1.4 Tm /F2 6.6 Tf 8 TL 16.0174 0 Td (AC ID) Tj T* -16.0174 0 Td ET
 Q
 Q
 q
-1 0 0 1 62 147.4 cm
+1 0 0 1 62 130.2 cm
 q
 1 1 1 rg
 BT 1 0 0 1 0 1.4 Tm /F2 6.6 Tf 8 TL 134.2804 0 Td (Coverage Depth \(AI\)) Tj T* -134.2804 0 Td ET
 Q
 Q
 q
-1 0 0 1 402 147.4 cm
+1 0 0 1 402 130.2 cm
 q
 1 1 1 rg
 BT 1 0 0 1 0 1.4 Tm /F2 6.6 Tf 8 TL 158.9157 0 Td (Coverage Gap \(AI\)) Tj T* -158.9157 0 Td ET
 Q
 Q
 q
-1 0 0 1 4 132.8 cm
+1 0 0 1 4 115.6 cm
 q
 .141176 .192157 .25098 rg
 BT 1 0 0 1 0 1.6 Tm /F1 7 Tf 8.6 TL 15.081 0 Td (AC-01) Tj T* -15.081 0 Td ET
 Q
 Q
 q
-1 0 0 1 62 132.8 cm
+1 0 0 1 62 115.6 cm
 q
 .141176 .192157 .25098 rg
-BT 1 0 0 1 0 1.6 Tm /F1 7 Tf 8.6 TL (1.Positive scenarios are covered) Tj T* ET
+BT 1 0 0 1 0 1.6 Tm /F1 7 Tf 8.6 TL (None) Tj T* ET
 Q
 Q
 q
-1 0 0 1 402 115.6 cm
+1 0 0 1 402 107 cm
 q
-BT 1 0 0 1 0 18.8 Tm 8.6 TL /F1 7 Tf .141176 .192157 .25098 rg (1.No Negative scenarios Covered) Tj  T* (2.No Adhoc scenarios Covered) Tj  T* (AC quality: good) Tj T* ET
+BT 1 0 0 1 0 10.2 Tm 8.6 TL /F1 7 Tf .141176 .192157 .25098 rg (No coverage) Tj  T* (AC quality: good) Tj T* ET
 Q
 Q
 q
-1 0 0 1 4 101 cm
+1 0 0 1 4 92.4 cm
 q
 .141176 .192157 .25098 rg
 BT 1 0 0 1 0 1.6 Tm /F1 7 Tf 8.6 TL 15.081 0 Td (AC-02) Tj T* -15.081 0 Td ET
@@ -1161,31 +1155,30 @@ Q
 Q
 q
 1 0 0 1 62 101 cm
+Q
 q
-.141176 .192157 .25098 rg
-BT 1 0 0 1 0 1.6 Tm /F1 7 Tf 8.6 TL (1.Negative scenarios are covered) Tj T* ET
+1 0 0 1 402 66.6 cm
+q
+BT 1 0 0 1 0 27.4 Tm 8.6 TL /F1 7 Tf .141176 .192157 .25098 rg (1.No Positive scenarios Covered) Tj  T* (2.No Negative scenarios Covered) Tj  T* (3.No Adhoc scenarios Covered) Tj  T* (AC quality: good) Tj T* ET
 Q
 Q
 q
-1 0 0 1 402 83.8 cm
-q
-BT 1 0 0 1 0 18.8 Tm 8.6 TL /F1 7 Tf .141176 .192157 .25098 rg (1.No Positive scenarios Covered) Tj  T* (2.No Adhoc scenarios Covered) Tj  T* (AC quality: good) Tj T* ET
-Q
-Q
-q
-1 0 0 1 4 69.2 cm
+1 0 0 1 4 52 cm
 q
 .141176 .192157 .25098 rg
 BT 1 0 0 1 0 1.6 Tm /F1 7 Tf 8.6 TL 15.081 0 Td (AC-03) Tj T* -15.081 0 Td ET
 Q
 Q
 q
-1 0 0 1 62 77.8 cm
+1 0 0 1 62 43.4 cm
+q
+BT 1 0 0 1 0 10.2 Tm 8.6 TL /F1 7 Tf .141176 .192157 .25098 rg (1.Positive scenarios are covered) Tj  T* (2.Negative scenarios are covered) Tj T* ET
+Q
 Q
 q
 1 0 0 1 402 43.4 cm
 q
-BT 1 0 0 1 0 27.4 Tm 8.6 TL /F1 7 Tf .141176 .192157 .25098 rg (1.No Positive scenarios Covered) Tj  T* (2.No Negative scenarios Covered) Tj  T* (3.No Adhoc scenarios Covered) Tj  T* (AC quality: good) Tj T* ET
+BT 1 0 0 1 0 10.2 Tm 8.6 TL /F1 7 Tf .141176 .192157 .25098 rg (1.No Adhoc scenarios Covered) Tj  T* (AC quality: good) Tj T* ET
 Q
 Q
 q
@@ -1209,41 +1202,41 @@ q
 1 j
 .835294 .862745 .890196 RG
 .3 w
-n 0 158.4 m 781.4098 158.4 l S
+n 0 141.2 m 781.4098 141.2 l S
 n 0 0 m 781.4098 0 l S
-n 0 0 m 0 158.4 l S
-n 781.4098 0 m 781.4098 158.4 l S
-n 0 144.4 m 781.4098 144.4 l S
-n 0 112.6 m 781.4098 112.6 l S
-n 0 80.8 m 781.4098 80.8 l S
+n 0 0 m 0 141.2 l S
+n 781.4098 0 m 781.4098 141.2 l S
+n 0 127.2 m 781.4098 127.2 l S
+n 0 104 m 781.4098 104 l S
+n 0 63.6 m 781.4098 63.6 l S
 n 0 40.4 m 781.4098 40.4 l S
-n 58 0 m 58 158.4 l S
-n 398 0 m 398 158.4 l S
+n 58 0 m 58 141.2 l S
+n 398 0 m 398 141.2 l S
 Q
 Q
 Q
 q
-1 0 0 1 36.24 220.7956 cm
+1 0 0 1 36.24 237.9956 cm
 Q
 q
-1 0 0 1 36.24 203.7956 cm
+1 0 0 1 36.24 220.9956 cm
 q
 .105882 .211765 .364706 rg
 BT 1 0 0 1 0 2.5 Tm /F2 12.5 Tf 15 TL (4. Bug Details) Tj T* ET
 Q
 Q
 q
-1 0 0 1 36.24 190.2956 cm
+1 0 0 1 36.24 207.4956 cm
 q
 .360784 .419608 .478431 rg
 BT 1 0 0 1 0 2 Tm /F1 7.5 Tf 9.5 TL (4 bugs listed, sorted by priority \(P1 first\) and severity irrespective of user story. Rows shaded grey are not open \(Resolved / Closed / Rejected\). Bold environment = escaped defect \(Production / UAT\).) Tj T* ET
 Q
 Q
 q
-1 0 0 1 36.24 187.2956 cm
+1 0 0 1 36.24 204.4956 cm
 Q
 q
-1 0 0 1 30.24 81.89559 cm
+1 0 0 1 30.24 99.09559 cm
 q
 .105882 .211765 .364706 rg
 n 0 105.4 781.4098 -12 re f*
@@ -1685,7 +1678,7 @@ xref
 0000001390 00000 n 
 0000001462 00000 n 
 0000005332 00000 n 
-0000016405 00000 n 
+0000016220 00000 n 
 trailer
 <<
 /ID 
@@ -1697,5 +1690,5 @@ trailer
 /Size 14
 >>
 startxref
-33943
+33671
 %%EOF

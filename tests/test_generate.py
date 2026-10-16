@@ -474,6 +474,127 @@ def test_live_generate_links_positive_negative_and_adhoc_before_the_report(
     assert pdf_text.count("Adequate") >= 2
 
 
+def test_graph_live_path_does_not_call_behavior_links():
+    import story_guard.analysis as analysis
+    import story_guard.graph as graph
+
+    graph_source = inspect.getsource(graph)
+    analysis_source = inspect.getsource(analysis)
+    assert "apply_behavior_links" not in graph_source
+    assert "apply_behavior_links" not in analysis_source
+    for test_id in range(121216, 121234):
+        assert str(test_id) not in graph_source
+        assert str(test_id) not in analysis_source
+
+
+def test_live_generate_with_no_tests_renders_without_a_model_call(
+    tmp_path, monkeypatch
+):
+    from pypdf import PdfReader
+
+    from story_guard.ado_client import ADOClient
+
+    def fail_chat(*_args, **_kwargs):
+        raise AssertionError("model call")
+
+    class FakeADOClient:
+        def load_live_story(self, story_id, test_plan_id=None):
+            return {
+                "id": "123086",
+                "title": "SNAP Login Screen - Admin",
+                "type": "User Story",
+                "state": "New",
+                "description": "",
+                "area": "Ecom MVP",
+                "iteration": "Ecom MVP",
+                "raw_ac_text": (
+                    "Scenario: AC-01 Admin signs in\n"
+                    "Expected: The admin reaches the dashboard."
+                ),
+                "tests": [],
+                "bugs": [],
+            }
+
+    monkeypatch.setattr(ADOClient, "from_env", classmethod(lambda cls: FakeADOClient()))
+    monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
+    monkeypatch.setattr("story_guard.analysis.ollama_chat", fail_chat)
+    monkeypatch.setattr("story_guard.cli.record_success", lambda *_args: None)
+
+    assert main(["generate", "--story-id", "123086", "--live"]) == 0
+
+    report = (tmp_path / "123086.md").read_text(encoding="utf-8")
+    assert "1 acceptance criteria | 0 adequately covered | 0 with gaps | 1 not covered" in report
+    assert "Tests: 0. Mapped: 0. Bugs: 0." in report
+    assert "No listed test checks AC-01." in report
+    pdf_text = "\n".join(
+        page.extract_text() or "" for page in PdfReader(tmp_path / "123086.pdf").pages
+    )
+    assert "No coverage" in pdf_text
+    assert "No open bugs" in pdf_text
+
+
+def test_live_generate_accepts_test_ids_outside_the_fixture_range(tmp_path, monkeypatch):
+    from story_guard import graph
+    from story_guard.ado_client import ADOClient
+    from story_guard.analysis import result_from_judgment
+
+    class FakeADOClient:
+        def load_live_story(self, story_id, test_plan_id=None):
+            return {
+                "id": "123086",
+                "title": "SNAP Login Screen - Admin",
+                "type": "User Story",
+                "state": "New",
+                "description": "",
+                "area": "Ecom MVP",
+                "iteration": "Ecom MVP",
+                "raw_ac_text": (
+                    "Scenario: AC-01 Admin signs in\n"
+                    "Expected: The admin reaches the dashboard."
+                ),
+                "tests": [
+                    _case("42", "Admin signs in"),
+                    _case("77", "Admin is rejected"),
+                ],
+                "bugs": [],
+            }
+
+    seen = {}
+
+    def fake_analyze(record):
+        seen["ids"] = [test["id"] for test in record["tests"]]
+        seen["links"] = [test["mapped_ac_ids"] for test in record["tests"]]
+        return result_from_judgment(
+            record,
+            {
+                "headline": "No open bugs.",
+                "health": "No open bugs",
+                "analysis": "The model reviewed the fetched tests.",
+                "reviews": [
+                    {
+                        "ac_id": "AC-01",
+                        "mapped_test_ids": ["42"],
+                        "test_types": {"42": "happy"},
+                        "coverage_status": "partial",
+                        "quality": {"status": "good", "testable": True, "issues": []},
+                    }
+                ],
+            },
+        )
+
+    monkeypatch.setattr(ADOClient, "from_env", classmethod(lambda cls: FakeADOClient()))
+    monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
+    monkeypatch.setattr(graph, "analyze_live", fake_analyze)
+    monkeypatch.setattr("story_guard.cli.record_success", lambda *_args: None)
+
+    assert main(["generate", "--story-id", "123086", "--live"]) == 0
+
+    assert seen["ids"] == ["42", "77"]
+    assert seen["links"] == [[], []]
+    report = (tmp_path / "123086.md").read_text(encoding="utf-8")
+    assert "Raw test IDs: 42, 77" in report
+
+
 @pytest.mark.parametrize("error_type", ["not_found", "not_story"])
 def test_live_ado_errors_exit_nonzero_without_report(
     tmp_path, monkeypatch, capsys, error_type
