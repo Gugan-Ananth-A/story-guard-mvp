@@ -392,6 +392,42 @@ class ADOClientTests(unittest.TestCase):
         self.assertEqual(loaded["tests"][0]["plan_id"], "121214")
         self.assertEqual(loaded["tests"][0]["suite_name"], "Story Guard - AI Agent")
 
+    def test_sprint_query_reads_user_stories_on_the_iteration_path(self) -> None:
+        captured = {}
+
+        def opener(request, timeout):
+            captured["request"] = request
+            captured["timeout"] = timeout
+            body = {"workItems": [{"id": 121213, "url": "https://example/121213"}, {"id": 123086}, {"id": 121213}]}
+            return BytesIO(json.dumps(body).encode("utf-8"))
+
+        path = "Ecom MVP\\Ecom phase 2.1 release\\Story Guard - AI Agent"
+        ids = self.make_client(opener).story_ids_for_iteration(path)
+        request = captured["request"]
+        query = json.loads(request.data.decode("utf-8"))["query"]
+
+        self.assertEqual(ids, ["121213", "123086"])
+        self.assertEqual(request.get_method(), "POST")
+        self.assertTrue(request.full_url.endswith("/_apis/wit/wiql?api-version=7.1"))
+        self.assertNotIn("offline-test-pat", request.full_url)
+        self.assertNotIn("offline-test-pat", request.data.decode("utf-8"))
+        self.assertIn("[System.WorkItemType] = 'User Story'", query)
+        self.assertIn(f"[System.IterationPath] = '{path}'", query)
+        self.assertNotIn("/workitems/", request.full_url.lower())
+        self.assertEqual(captured["timeout"], 15.0)
+
+    def test_sprint_query_escapes_a_quote_in_the_iteration_path(self) -> None:
+        captured = {}
+
+        def opener(request, timeout):
+            captured["query"] = json.loads(request.data.decode("utf-8"))["query"]
+            return BytesIO(json.dumps({"workItems": []}).encode("utf-8"))
+
+        ids = self.make_client(opener).story_ids_for_iteration("Team's\\Sprint")
+
+        self.assertEqual(ids, [])
+        self.assertIn("[System.IterationPath] = 'Team''s\\Sprint'", captured["query"])
+
 
 if __name__ == "__main__":
     unittest.main()
