@@ -5,7 +5,17 @@
 **Breach:** a generate path that breaks a rule below is a defect, same as a blown token cap.  
 **Companions:** `docs/orchestration-and-cost.md` §4 (budget and the 8 GB runtime), `docs/requirements.md` §11 (the one-call graph).
 
-Phase 1 this week stays the graph already locked: Python nodes score the story, one local model call writes the narrative, no tools, one shared score object. This file is the plan for three levers that sit around that call. It is not code, and it is not a second orchestrator.
+The current live path uses the same single pipeline, but its model work is
+criterion-scoped: one configured-provider call reviews one AC against one bounded suite
+batch, repeated across suites and criteria. Python combines those predictions,
+calculates final coverage and health, and renders the report. The separate
+offline narrative path remains a single score-to-prose call. This file is the
+plan for the surrounding levers; it is not a second orchestrator.
+
+Live-linkage exception: the criterion reviewer may propose AC-to-test links and
+AC-quality findings because that is now the requested analysis. Those links are
+ephemeral score evidence only; the fetched `mapped_ac_ids` source fields are
+never mutated or treated as authoritative.
 
 ---
 
@@ -31,7 +41,9 @@ The prefix carries no story id, AC text, test id, bug id, or count. Those live i
 
 ### 1.3 This week
 
-Hosted prompt-cache billing does not apply. The development runner is local Ollama on an 8 GB Mac (`docs/orchestration-and-cost.md` §4.5).
+Hosted prompt-cache billing applies only when the optional DeepSeek provider is
+selected. The default development runner remains local Ollama on an 8 GB Mac
+(`docs/orchestration-and-cost.md` §4.5).
 
 The constraint still holds: one system message, or one Modelfile system block, identical for every story. Assemble the request as **prefix, then score JSON**, in that order.
 
@@ -44,7 +56,7 @@ Turn it on only after the same prefix has been used, unchanged, for the five fix
 | Runtime | How the prefix is cached | Still true |
 | --- | --- | --- |
 | Local Ollama | The runner may reuse a prefix only when the leading bytes match exactly. `num_ctx` stays **8192**. | A miss is acceptable. A hit that contains another story’s facts is a defect. |
-| A later hosted model, if D7 ever leaves local | The same prefix is the cacheable block. The score object is not marked cacheable. | Cache the rubric, not the story. |
+| DeepSeek API | The same prefix is sent as the system message. The score object is not marked cacheable. | Cache the rubric, not the story. |
 
 The 4,096-token target includes the prefix. If the prefix grows until the score object no longer fits, cut the rubric text. Do not raise `num_ctx`.
 
@@ -97,13 +109,13 @@ Prune each schema to that shape:
 
 ## 3. Context isolation, only if multi-agent
 
-Phase 1 keeps **one** model context: the score object, with AC rows, test counts, and bugs in the same JSON. The headline is written from that object. Splitting those facts across calls is how an open Sev1 disappears from the header.
+Live coverage judgement is one acceptance criterion against one test suite per call. The calls run one after another on the same resident model. Story health, the headline, and the action list are written in code from the full record, including every open bug, and the PDF is rendered from the combined score. A coverage call does not see the other criteria, so it cannot drop a bug from the header.
 
-Multi-agent is not phase 1 (D10 in `docs/orchestration-and-cost.md`). This section applies only if the reversal test in §6 of that doc is met. It is not a design to build in parallel.
+Multi-agent is not phase 1 (D10 in `docs/orchestration-and-cost.md`). The per-criterion calls above are sequential calls to the same model, not specialist agents. The rest of this section applies only if the reversal test in §6 of that doc is met.
 
 ### 3.1 What may be split
 
-Isolation is for **retrieval** when a fixture’s score object no longer fits in 4,096 tokens. It is not a way to split judgement.
+The table below is the rule for a later multi-agent split. Live coverage already isolates one criterion and one suite. Code writes health, the headline, and the actions from the whole record.
 
 | Material | Isolated context allowed? | Must remain in the writer’s score object |
 | --- | --- | --- |

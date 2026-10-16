@@ -107,5 +107,291 @@ class ADOClientTests(unittest.TestCase):
         self.assertIsInstance(raised.exception, ADOClientError)
 
 
+    def test_load_live_story_follows_the_child_test_plan(self) -> None:
+        story = {
+            "id": 121213,
+            "fields": {
+                "System.Title": "Login Screen",
+                "System.WorkItemType": "User Story",
+                "System.State": "New",
+                "System.Description": "Scenario: Successful login\nExpected: Dashboard",
+                "Microsoft.VSTS.Common.AcceptanceCriteria": "",
+            },
+            "relations": [
+                {
+                    "rel": "System.LinkTypes.Hierarchy-Forward",
+                    "url": "https://dev.azure.com/example/_apis/wit/workItems/121214",
+                }
+            ],
+        }
+        plan = {
+            "id": 121214,
+            "fields": {
+                "System.Title": "Story Guard - AI Agent",
+                "System.WorkItemType": "Test Plan",
+                "System.State": "Active",
+            },
+            "relations": [],
+        }
+        suites = {
+            "value": [
+                {
+                    "id": 121215,
+                    "name": "Story Guard - AI Agent",
+                    "suiteType": "staticTestSuite",
+                }
+            ]
+        }
+        cases = {
+            "value": [
+                {"workItem": {"id": 121216, "name": "[AUTH-102065-P01] Valid login"}},
+                {"workItem": {"id": 121216, "name": "[AUTH-102065-P01] Valid login"}},
+                {"workItem": {"id": 121228, "name": "Forgot password"}},
+            ]
+        }
+
+        login_case = {
+            "id": 121216,
+            "fields": {
+                "System.Title": "[AUTH-102065-P01] Valid login",
+                "System.WorkItemType": "Test Case",
+                "Microsoft.VSTS.TCM.Steps": "<steps><step>Click <b>Login</b></step></steps>",
+            },
+            "relations": [],
+        }
+
+        def opener(request, timeout):
+            url = request.full_url
+            if "/workitems/121216" in url:
+                body = login_case
+            elif "/workitems/121214" in url:
+                body = plan
+            elif "/testcase?" in url:
+                body = cases
+            elif "/suites?" in url:
+                body = suites
+            else:
+                body = story
+            return BytesIO(json.dumps(body).encode("utf-8"))
+
+        loaded = self.make_client(opener).load_live_story(121213)
+
+        self.assertEqual(loaded["id"], "121213")
+        self.assertEqual([case["id"] for case in loaded["tests"]], ["121216", "121228"])
+        self.assertEqual(loaded["tests"][0]["title"], "[AUTH-102065-P01] Valid login")
+        self.assertEqual(loaded["tests"][0]["type"], "")
+        self.assertEqual(loaded["tests"][0]["mapped_ac_ids"], [])
+        self.assertEqual(loaded["tests"][0]["steps"], "Click Login")
+        self.assertEqual(loaded["tests"][1]["steps"], "")
+        self.assertEqual(loaded["tests"][0]["suite_id"], "121215")
+        self.assertEqual(loaded["tests"][0]["plan_id"], "121214")
+        self.assertEqual(loaded["bugs"], [])
+
+    def test_missing_link_is_skipped_and_bugs_are_kept(self) -> None:
+        story = {
+            "id": 121213,
+            "fields": {
+                "System.Title": "Login Screen",
+                "System.WorkItemType": "User Story",
+                "System.State": "New",
+                "System.Description": "",
+                "Microsoft.VSTS.Common.AcceptanceCriteria": "",
+            },
+            "relations": [
+                {
+                    "rel": "System.LinkTypes.Related",
+                    "url": "https://dev.azure.com/example/_apis/wit/workItems/999999",
+                },
+                {
+                    "rel": "System.LinkTypes.Related",
+                    "url": "https://dev.azure.com/example/_apis/wit/workItems/122590",
+                },
+                {
+                    "rel": "System.LinkTypes.Related",
+                    "url": "https://dev.azure.com/example/_apis/wit/workItems/121214",
+                },
+                {
+                    "rel": "System.LinkTypes.Related",
+                    "url": "https://dev.azure.com/example/_apis/wit/workItems/42",
+                },
+            ],
+        }
+        plan = {
+            "id": 121214,
+            "fields": {
+                "System.Title": "Story Guard - AI Agent",
+                "System.WorkItemType": "Test Plan",
+                "System.State": "Active",
+            },
+            "relations": [],
+        }
+        bug = {
+            "id": 122590,
+            "fields": {
+                "System.Title": "Password field is not accepting special characters",
+                "System.WorkItemType": "Bug",
+                "System.State": "New",
+                "System.CreatedDate": "2026-10-09T10:12:32.593Z",
+                "System.AssignedTo": {"displayName": "Gugan Ananth Anantha Selvan"},
+                "System.AreaPath": "Ecom MVP",
+                "Microsoft.VSTS.Common.Priority": 2,
+                "Microsoft.VSTS.Common.Severity": "2 - High",
+                "Custom.Environment": "Staging",
+            },
+            "relations": [],
+        }
+        direct_case = {
+            "id": 42,
+            "fields": {
+                "System.Title": "Direct admin case",
+                "System.WorkItemType": "Test Case",
+                "System.State": "Design",
+            },
+            "relations": [],
+        }
+        suites = {
+            "value": [
+                {
+                    "id": 121215,
+                    "name": "Story Guard - AI Agent",
+                    "suiteType": "staticTestSuite",
+                }
+            ]
+        }
+        cases = {"value": [{"workItem": {"id": 121216, "name": "Valid login"}}]}
+
+        def opener(request, timeout):
+            url = request.full_url
+            if "/workitems/999999" in url:
+                raise HTTPError(url, 404, "Not Found", {}, BytesIO())
+            if "/workitems/122590" in url:
+                body = bug
+            elif "/workitems/42" in url:
+                body = direct_case
+            elif "/workitems/121214" in url:
+                body = plan
+            elif "/testcase?" in url:
+                body = cases
+            elif "/suites?" in url:
+                body = suites
+            else:
+                body = story
+            return BytesIO(json.dumps(body).encode("utf-8"))
+
+        loaded = self.make_client(opener).load_live_story(121213)
+
+        self.assertEqual([case["id"] for case in loaded["tests"]], ["121216", "42"])
+        self.assertEqual(loaded["tests"][1]["title"], "Direct admin case")
+        self.assertEqual(loaded["tests"][1]["mapped_ac_ids"], [])
+        bug_row = loaded["bugs"][0]
+        self.assertEqual(bug_row["id"], "122590")
+        self.assertEqual(bug_row["title"], "Password field is not accepting special characters")
+        self.assertEqual(bug_row["priority"], "P2")
+        self.assertEqual(bug_row["severity"], "2 - High")
+        self.assertEqual(bug_row["status"], "New")
+        self.assertEqual(bug_row["found_in"], "Staging")
+        self.assertEqual(bug_row["linked_story_id"], "121213")
+        self.assertEqual(bug_row["assigned_to"], "Gugan Ananth Anantha Selvan")
+        self.assertEqual(bug_row["created"], "2026-10-09")
+        self.assertIsInstance(bug_row["age"], int)
+
+    def test_explicit_plan_id_skips_relation_discovery(self) -> None:
+        story = {
+            "id": 555001,
+            "fields": {
+                "System.Title": "Other story",
+                "System.WorkItemType": "User Story",
+                "System.State": "New",
+                "System.Description": "",
+                "Microsoft.VSTS.Common.AcceptanceCriteria": "",
+            },
+            "relations": [],
+        }
+        suites = {"value": [{"id": 9, "suiteType": "staticTestSuite"}]}
+        cases = {"value": [{"workItem": {"id": 42, "name": "Other case"}}]}
+
+        def opener(request, timeout):
+            url = request.full_url
+            if "/testcase?" in url:
+                self.assertIn("/plans/77/", url)
+                body = cases
+            elif "/suites?" in url:
+                body = suites
+            else:
+                body = story
+            return BytesIO(json.dumps(body).encode("utf-8"))
+
+        loaded = self.make_client(opener).load_live_story(555001, test_plan_id=77)
+        self.assertEqual([case["id"] for case in loaded["tests"]], ["42"])
+
+    def test_suite_id_uses_the_plan_linked_from_the_story(self) -> None:
+        story = {
+            "id": 121213,
+            "fields": {
+                "System.Title": "Login Screen",
+                "System.WorkItemType": "User Story",
+                "System.State": "New",
+                "System.Description": "",
+                "Microsoft.VSTS.Common.AcceptanceCriteria": "",
+            },
+            "relations": [
+                {
+                    "rel": "System.LinkTypes.Hierarchy-Forward",
+                    "url": "https://dev.azure.com/example/_apis/wit/workItems/121214",
+                }
+            ],
+        }
+        plan = {
+            "id": 121214,
+            "fields": {
+                "System.Title": "Story Guard - AI Agent",
+                "System.WorkItemType": "Test Plan",
+                "System.State": "Active",
+            },
+            "relations": [],
+        }
+        suite_item = {
+            "id": 121215,
+            "fields": {
+                "System.Title": "Story Guard - AI Agent",
+                "System.WorkItemType": "Test Suite",
+                "System.State": "In Progress",
+            },
+            "relations": [],
+        }
+        suites = {
+            "value": [
+                {
+                    "id": 121215,
+                    "name": "Story Guard - AI Agent",
+                    "suiteType": "staticTestSuite",
+                }
+            ]
+        }
+        cases = {"value": [{"workItem": {"id": 121216, "name": "Valid login"}}]}
+
+        def opener(request, timeout):
+            url = request.full_url
+            if "/plans/121215/" in url:
+                raise HTTPError(url, 404, "Not Found", {}, BytesIO())
+            if "/workitems/121215" in url:
+                body = suite_item
+            elif "/workitems/121214" in url:
+                body = plan
+            elif "/testcase?" in url:
+                self.assertIn("/plans/121214/suites/121215/", url)
+                body = cases
+            elif "/suites?" in url:
+                body = suites
+            else:
+                body = story
+            return BytesIO(json.dumps(body).encode("utf-8"))
+
+        loaded = self.make_client(opener).load_live_story(121213, test_plan_id=121215)
+        self.assertEqual(loaded["tests"][0]["suite_id"], "121215")
+        self.assertEqual(loaded["tests"][0]["plan_id"], "121214")
+        self.assertEqual(loaded["tests"][0]["suite_name"], "Story Guard - AI Agent")
+
+
 if __name__ == "__main__":
     unittest.main()

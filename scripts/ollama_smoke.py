@@ -32,15 +32,23 @@ def main() -> int:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=180) as response:
+        with urllib.request.urlopen(request, timeout=600) as response:
             body = json.load(response)
     except urllib.error.URLError as exc:
         print(f"ollama smoke failed: {exc}", file=sys.stderr)
         return 1
-    content = body.get("message", {}).get("content", "")
-    try:
-        obj = json.loads(content)
-    except json.JSONDecodeError:
+    message = body.get("message", {})
+    candidates = [message.get("content", ""), message.get("thinking", "")]
+    obj = None
+    for content in candidates:
+        if not isinstance(content, str) or not content.strip():
+            continue
+        try:
+            obj = json.loads(content)
+            break
+        except json.JSONDecodeError:
+            continue
+    if obj is None:
         print("ollama smoke failed: response was not JSON", file=sys.stderr)
         return 1
     if not isinstance(obj, dict):

@@ -10,7 +10,7 @@ A scenario is covered only when some test lists its `ac_id` in `mapped_ac_ids`. 
 
 ## SR-2
 
-Story health is the highest open bug priority. An open bug is one whose status is not Resolved, Closed, Rejected, or Unable to Reproduce.
+Story health is the highest open bug priority. An open bug is one whose status does not contain Resolved, Closed, Rejected, or Unable to Reproduce. A compound status such as Rejected / Unable to Reproduce is closed.
 
 - An open P1 sets health to Critical and the band to At Risk.
 - Otherwise an open P2 sets health to High and the band to At Risk.

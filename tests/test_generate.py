@@ -94,39 +94,33 @@ def test_generate_writes_eight_headings_and_score_pdf(tmp_path, monkeypatch, cap
     assert "No bugs." in text
     assert "partially covered" not in text
     assert "%" not in text
-    printed = capsys.readouterr().out.strip()
+    captured = capsys.readouterr()
+    printed = captured.out.strip()
     assert printed == str(report)
+    assert "[story-guard] starting generation for story 121213" in captured.err
+    assert "[story-guard] rendering Markdown and PDF reports" in captured.err
     pdf_text = pdf.read_bytes()
-    expected_headings = [heading[3:] for heading in HEADINGS]
-    actual_pdf_headings = [
-        heading
-        for heading in expected_headings
-        if heading != "AC ↔ test mapping" and heading.encode("utf-8") in pdf_text
-    ]
-    assert actual_pdf_headings == [
-        heading for heading in expected_headings if heading != "AC ↔ test mapping"
-    ]
-    assert b"AC " in pdf_text and b"test mapping" in pdf_text
-    assert b"The AC field is empty." in pdf_text
-    assert b"SCENARIOS" in pdf_text
-    assert b"COVERAGE RAG" in pdf_text
-    assert b"Story ID" in pdf_text
-    assert b"AC ID" in pdf_text
-    assert b"Test IDs" in pdf_text
-    assert b"Bug IDs" in pdf_text
-    assert f"Scenarios: {score['scenario_count']}".encode() in pdf_text
-    assert f"Total tests: {score['test_count']}".encode() in pdf_text
-    assert f"Mapped ACs: {score['mapped_count']}".encode() in pdf_text
-    assert f"Bugs: {score['bug_count']}".encode() in pdf_text
-    assert score["rag"].encode() in pdf_text
+    for marker in (
+        b"1. Portfolio Summary",
+        b"2. Story Health Overview",
+        b"3. Acceptance Criteria vs Test Case Coverage",
+        b"4. Bug Details",
+        b"Key Observations",
+        b"The AC field is empty.",
+        b"No open bugs",
+        b"18",
+        b"No bugs.",
+        b"Page 1 of",
+    ):
+        assert marker in pdf_text
+    assert b"Test coverage: 66%" not in pdf_text
+    assert b"0%" in pdf_text
+    assert b"n/a" not in pdf_text
+    assert b"Story health - No open bugs" in pdf_text
+    assert b"Test suite" not in pdf_text
+    assert f"{score['scenario_count']} acceptance criteria".encode() in pdf_text
+    assert f"{score['none_count']} not covered".encode() in pdf_text
     assert b"The None count is on the score." in pdf_text
-    assert b"Scenarios: 8" in pdf_text
-    assert b"Total tests: 18" in pdf_text
-    assert b"Mapped ACs: 0" in pdf_text
-    assert b"Bugs: 0" in pdf_text
-    assert b"Red" in pdf_text
-    assert b"SR-1, SR-2, SR-3" in pdf_text
-    assert b"The AC field is empty." in pdf_text
 
 
 def test_score_command_does_not_call_the_model(monkeypatch, capsys):
@@ -241,58 +235,243 @@ def test_default_generate_never_constructs_ado_client(tmp_path, monkeypatch, cap
     capsys.readouterr()
 
 
-def test_live_generate_uses_ado_story_and_fixture_tests(tmp_path, monkeypatch, capsys):
+def test_live_generate_uses_ado_story_and_plan_tests(tmp_path, monkeypatch, capsys):
     import json
 
     from story_guard import graph
-    from story_guard.ado_client import ADOClient, StoryRecord
-    from story_guard.test_adapter import fetch_tests as read_fixture_tests
+    from story_guard.ado_client import ADOClient
 
     fixture_record = json.loads((ROOT / "fixtures" / "FIX-121213.json").read_text())
-    live_story = StoryRecord(
-        id="121213",
-        title="Live ADO Login Screen",
-        type="User Story",
-        state="New",
-        description=fixture_record["description"],
-        area="StoryGuard",
-        iteration="StoryGuard\\Sprint",
-        raw_ac_text="",
-        acceptance_criteria=[],
-        notes=[],
-    )
     ado_calls = []
-    test_adapter_calls = []
 
     class FakeADOClient:
-        def get_story(self, work_item_id):
-            ado_calls.append(work_item_id)
-            return live_story
+        def load_live_story(self, story_id, test_plan_id=None):
+            ado_calls.append((story_id, test_plan_id))
+            return {
+                "id": "121213",
+                "title": "Live ADO Login Screen",
+                "type": "User Story",
+                "state": "New",
+                "description": fixture_record["description"],
+                "area": "StoryGuard",
+                "iteration": "StoryGuard\\Sprint",
+                "raw_ac_text": "",
+                "acceptance_criteria": [],
+                "tests": [
+                    {
+                        "id": "121216",
+                        "title": "Valid login",
+                        "type": "",
+                        "mapped_ac_ids": [],
+                        "last_result": "",
+                        "last_result_at": None,
+                        "linked_bug_ids": [],
+                        "suite_id": "121215",
+                        "suite_name": "Story Guard - AI Agent",
+                        "suite_type": "staticTestSuite",
+                        "plan_id": "121214",
+                    },
+                    {
+                        "id": "121228",
+                        "title": "Forgot password",
+                        "type": "",
+                        "mapped_ac_ids": [],
+                        "last_result": "",
+                        "last_result_at": None,
+                        "linked_bug_ids": [],
+                        "suite_id": "121215",
+                        "suite_name": "Story Guard - AI Agent",
+                        "suite_type": "staticTestSuite",
+                        "plan_id": "121214",
+                    },
+                ],
+                "bugs": [
+                    {
+                        "id": "122590",
+                        "title": "Password field is not accepting special characters",
+                        "severity": "2 - High",
+                        "priority": "P2",
+                        "status": "New",
+                        "age": 0,
+                        "found_in": "Staging",
+                        "linked_story_id": "121213",
+                        "linked_tc_id": "",
+                        "assigned_to": "Gugan",
+                        "application": "Ecom MVP",
+                        "created": "2026-10-09",
+                    }
+                ],
+            }
 
-    def fetch_fixture_tests(story_id):
-        test_adapter_calls.append(story_id)
-        return read_fixture_tests(story_id)
+    def fail_fixture(_story_id):
+        raise AssertionError("fixture tests were loaded")
 
-    monkeypatch.setattr(
-        ADOClient,
-        "from_env",
-        classmethod(lambda cls: FakeADOClient()),
-    )
-    monkeypatch.setattr(graph, "fetch_tests", fetch_fixture_tests)
+    analyzed = []
+
+    def fake_analyze(record):
+        from story_guard.analysis import result_from_judgment
+
+        analyzed.append(record)
+        return result_from_judgment(
+            record,
+            {
+                "headline": "Admin login needs bug review",
+                "health": "High",
+                "analysis": "The open bug blocks a confident sign-off.",
+                "reviews": [],
+                "actions": [
+                    {"owner": "Dev", "text": "Fix the password bug."},
+                    {"owner": "QA", "text": "Retest the login screen."},
+                    {"owner": "PO", "text": "Confirm the acceptance criteria."},
+                ],
+            },
+            token_count=10,
+            narrative_latency_ms=5,
+        )
+
+    monkeypatch.setattr(ADOClient, "from_env", classmethod(lambda cls: FakeADOClient()))
+    monkeypatch.setattr(graph, "fetch_tests", fail_fixture)
     monkeypatch.setattr(graph, "artifacts_dir", lambda: tmp_path)
-    monkeypatch.setattr(graph, "request_narrative", _fake_narrative)
+    monkeypatch.setattr(graph, "analyze_live", fake_analyze)
     monkeypatch.setattr("story_guard.cli.record_success", lambda *_args: None)
 
-    assert main(["generate", "--story-id", "121213", "--live"]) == 0
+    assert main(["generate", "--story-id", "121213", "--test-plan-id", "121214", "--live"]) == 0
 
     report = (tmp_path / "121213.md").read_text(encoding="utf-8")
-    assert ado_calls == [121213]
-    assert test_adapter_calls == ["121213"]
+    assert ado_calls == [(121213, 121214)]
+    assert analyzed[0]["bugs"][0]["id"] == "122590"
     assert "Title: Live ADO Login Screen" in report
     assert "Source: ADO dummy project" in report
+    assert "Admin login needs bug review" in report
     assert "8 acceptance criteria | 0 adequately covered | 0 with gaps | 8 not covered" in report
-    assert "Tests: 18. Mapped: 0. Bugs: 0." in report
+    assert "Tests: 2. Mapped: 0. Bugs: 1." in report
+    assert "Password field is not accepting special characters" in report
+    assert "Raw test IDs: 121216, 121228" in report
+    assert "Test suites:" not in report
+    assert "Suite 121215" not in report
     capsys.readouterr()
+
+
+def _case(test_id: str, title: str, steps: str = "") -> dict:
+    row = {
+        "id": test_id,
+        "title": title,
+        "type": "",
+        "mapped_ac_ids": [],
+        "last_result": "",
+        "last_result_at": None,
+        "linked_bug_ids": [],
+        "suite_id": "121215",
+        "suite_name": "Story Guard - AI Agent",
+        "suite_type": "staticTestSuite",
+        "plan_id": "121214",
+    }
+    if steps:
+        row["steps"] = steps
+    return row
+
+
+def test_live_generate_links_positive_negative_and_adhoc_before_the_report(
+    tmp_path, monkeypatch
+):
+    """Report generation maps the cases. The written mapping and the PDF use those links."""
+    from pypdf import PdfReader
+
+    from story_guard import graph
+    from story_guard.ado_client import ADOClient
+    from story_guard.analysis import result_from_judgment
+
+    raw_ac = (
+        "Scenario: AC-03 Password visibility — Show\n"
+        "Expected: When the user has entered a password and clicks Show, "
+        "the password is displayed as plain text.\n"
+        "Scenario: AC-04 Forgot Password navigation\n"
+        "Expected: When the user clicks Forgot Password?, "
+        "the user is redirected to the password recovery page.\n"
+    )
+
+    class FakeADOClient:
+        def load_live_story(self, story_id, test_plan_id=None):
+            return {
+                "id": "123086",
+                "title": "SNAP Login Screen - Admin",
+                "type": "User Story",
+                "state": "New",
+                "description": "",
+                "area": "Ecom MVP",
+                "iteration": "Ecom MVP",
+                "raw_ac_text": raw_ac,
+                "acceptance_criteria": [],
+                "tests": [
+                    _case("121224", "Verify 'Show' toggle reveals the entered password"),
+                    _case("123378", "Verify click Show button with an invalid password"),
+                    _case("123379", "Verify Show password with leading/trailing spaces"),
+                    _case("121228", "Verify navigation to the Forgot Password flow"),
+                    _case("123390", "Verify click Forgot Password with empty credentials"),
+                    _case(
+                        "123396",
+                        "Verify navigate using keyboard",
+                        "Use Tab to focus Forgot Password?. The password recovery page opens.",
+                    ),
+                ],
+                "bugs": [],
+            }
+
+    monkeypatch.setattr(ADOClient, "from_env", classmethod(lambda cls: FakeADOClient()))
+    monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
+    monkeypatch.setattr("story_guard.cli.record_success", lambda *_args: None)
+
+    def fake_analyze(record):
+        return result_from_judgment(
+            record,
+            {
+                "headline": "No open bugs.",
+                "health": "No open bugs",
+                "analysis": "The model reviewed every acceptance criterion.",
+                "reviews": [
+                    {
+                        "ac_id": "AC-03",
+                        "mapped_test_ids": ["121224", "123378", "123379"],
+                        "test_types": {
+                            "121224": "happy",
+                            "123378": "negative",
+                            "123379": "adhoc",
+                        },
+                        "coverage_status": "adequate",
+                        "quality": {"status": "good", "testable": True, "issues": []},
+                    },
+                    {
+                        "ac_id": "AC-04",
+                        "mapped_test_ids": ["121228", "123390", "123396"],
+                        "test_types": {
+                            "121228": "happy",
+                            "123390": "negative",
+                            "123396": "adhoc",
+                        },
+                        "coverage_status": "adequate",
+                        "quality": {"status": "good", "testable": True, "issues": []},
+                    },
+                ],
+            },
+            token_count=12,
+            narrative_latency_ms=5,
+        )
+
+    monkeypatch.setattr(graph, "analyze_live", fake_analyze)
+
+    assert main(["generate", "--story-id", "123086", "--live"]) == 0
+
+    report = (tmp_path / "123086.md").read_text(encoding="utf-8")
+    assert "2 adequately covered" in report
+    assert "AC-03: linked tests 121224, 123378, 123379" in report
+    assert "AC-04: linked tests 121228, 123390, 123396" in report
+    pdf_text = "\n".join(
+        page.extract_text() or "" for page in PdfReader(tmp_path / "123086.pdf").pages
+    )
+    assert "Positive scenarios are covered" in pdf_text
+    assert "Negative scenarios are covered" in pdf_text
+    assert "Adhoc scenarios are covered" in pdf_text
+    assert pdf_text.count("Adequate") >= 2
 
 
 @pytest.mark.parametrize("error_type", ["not_found", "not_story"])
@@ -312,7 +491,7 @@ def test_live_ado_errors_exit_nonzero_without_report(
     )
 
     class FailedADOClient:
-        def get_story(self, _work_item_id):
+        def load_live_story(self, _story_id, _test_plan_id=None):
             raise exception
 
     monkeypatch.setattr(
@@ -340,6 +519,13 @@ def test_generate_path_does_not_name_ado_pat():
 
     for module in (cli, graph, narrative, prefix, render, trace):
         assert "ADO_PAT" not in inspect.getsource(module)
+
+
+def test_test_plan_id_requires_live(capsys):
+    assert main(["generate", "--story-id", "121213", "--test-plan-id", "121214"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "requires --live" in captured.err
 
 
 def test_demo_script_has_no_live_flag():

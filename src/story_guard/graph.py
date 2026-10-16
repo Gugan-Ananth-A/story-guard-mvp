@@ -1,14 +1,22 @@
 """Code-node graph. score stops after score_health. generate continues through the report."""
 
+import html
+import inspect
 import json
 import os
 import re
 from pathlib import Path
+from collections.abc import Callable
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from story_guard.narrative import NarrativeError, write_narrative as request_narrative
+from story_guard.analysis import analyze_live
+from story_guard.narrative import (
+    NarrativeError,
+    enforce_narrative_rules,
+    write_narrative as request_narrative,
+)
 from story_guard.render import (
     RenderError,
     render_markdown,
@@ -72,6 +80,7 @@ _ACCEPTED_STORY_ID = "121213"
 class GraphState(TypedDict, total=False):
     story_id: str
     live: bool
+    test_plan_id: str
     record: dict
     score: dict
     narrative: dict
@@ -79,6 +88,7 @@ class GraphState(TypedDict, total=False):
     pdf_path: str
     token_count: int
     narrative_latency_ms: int
+    progress: Callable[[str], None]
 
 
 class GateError(Exception):
@@ -93,6 +103,17 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _notify(state: GraphState, message: str) -> None:
+    """Emit best-effort progress for interactive CLI runs."""
+    callback = state.get("progress")
+    if not callable(callback):
+        return
+    try:
+        callback(message)
+    except Exception:
+        return
+
+
 def gate_input(state: GraphState) -> dict:
     raw = state.get("story_id")
     story_id = raw.strip() if isinstance(raw, str) else ""
@@ -100,16 +121,32 @@ def gate_input(state: GraphState) -> dict:
         raise GateError("story id is blank")
     if not story_id.isdigit():
         raise GateError("story id is not numeric")
-    if story_id != _ACCEPTED_STORY_ID:
-        raise GateError(f"story id {story_id} is not in the fixture")
     live = state.get("live", False)
     if not isinstance(live, bool):
         raise GateError("live flag must be a boolean")
+    if story_id != _ACCEPTED_STORY_ID and not live:
+        raise GateError(f"story id {story_id} is not in the fixture")
+    plan_id = state.get("test_plan_id")
+    if plan_id is not None:
+        plan_id = plan_id.strip() if isinstance(plan_id, str) else ""
+        if plan_id == "" or not plan_id.isdigit() or plan_id == "0":
+            raise GateError("test plan id is not numeric")
+        if not live:
+            raise GateError("test plan id requires --live")
     validate_template(_template_path())
-    return {"story_id": story_id, "live": live}
+    gated = {"story_id": story_id, "live": live}
+    if callable(state.get("progress")):
+        gated["progress"] = state["progress"]
+    if plan_id:
+        gated["test_plan_id"] = plan_id
+    return gated
 
 
 def fetch(state: GraphState) -> dict:
+    if state.get("live", False):
+        _notify(state, f"fetching live story {state.get('story_id')} and test suites")
+        return {"record": _fetch_live(state)}
+    _notify(state, f"loading fixture for story {state.get('story_id')}")
     path = _repo_root() / "fixtures" / "FIX-121213.json"
     try:
         text = path.read_text(encoding="utf-8")
@@ -124,26 +161,61 @@ def fetch(state: GraphState) -> dict:
     if not isinstance(story_id, str) or story_id.strip() == "":
         story_id = str(fixture_record.get("id") or "")
 
-    if state.get("live", False):
-        from story_guard.ado_client import ADOClient
-
-        story = ADOClient.from_env().get_story(int(story_id)).to_dict()
-        record = _story_record_from_ado(story, fixture_record)
-    else:
-        record = fixture_record
-
     try:
         adapter_rows = fetch_tests(story_id)
     except DummyTestAdapterError as exc:
         raise ContractError(str(exc)) from exc
-    record["tests"] = _tests_from_adapter(record.get("tests"), adapter_rows)
-    return {"record": record}
+    fixture_record["tests"] = _tests_from_adapter(fixture_record.get("tests"), adapter_rows)
+    _notify(state, "fixture loaded")
+    return {"record": fixture_record}
+
+
+def _fetch_live(state: GraphState) -> dict:
+    """Load the story and the cases in its Azure DevOps test plan."""
+    from story_guard.ado_client import ADOClient
+
+    story_id = state.get("story_id")
+    if not isinstance(story_id, str) or not story_id.isdigit():
+        raise GateError("story id is not numeric")
+    plan_text = state.get("test_plan_id")
+    plan_id = int(plan_text) if isinstance(plan_text, str) and plan_text.isdigit() else None
+    story = ADOClient.from_env().load_live_story(int(story_id), plan_id)
+    record = _story_record_from_ado(story, _blank_story_record())
+    # Live test cases arrive with source-side links empty. AC↔test links are
+    # predicted and checked by analyze_live, one criterion at a time.
+    record["tests"] = list(story.get("tests") or [])
+    record["bugs"] = list(story.get("bugs") or [])
+    _notify(
+        state,
+        f"fetched {len(record.get('acceptance_criteria') or [])} acceptance criteria, "
+        f"{len(record['tests'])} tests, and {len(record['bugs'])} bugs",
+    )
+    return record
+
+
+def _blank_story_record() -> dict:
+    return {
+        "id": "",
+        "title": "",
+        "type": "",
+        "state": "",
+        "description": "",
+        "area": "",
+        "iteration": "",
+        "acceptance_criteria_raw": "",
+        "acceptance_criteria": [],
+        "scenarios": [],
+        "note": "",
+        "tests": [],
+        "bugs": [],
+    }
 
 
 def _story_record_from_ado(story: dict, fixture_record: dict) -> dict:
     """Replace fixture story fields with ADO fields while keeping fixture test data."""
     record = dict(fixture_record)
     description = story.get("description") or ""
+    raw_ac = story.get("raw_ac_text") or ""
     record.update(
         {
             "id": story["id"],
@@ -153,45 +225,73 @@ def _story_record_from_ado(story: dict, fixture_record: dict) -> dict:
             "description": description,
             "area": story.get("area") or "",
             "iteration": story.get("iteration") or "",
-            "acceptance_criteria_raw": story.get("raw_ac_text") or "",
-            "acceptance_criteria": story.get("acceptance_criteria") or [],
-            "scenarios": _scenarios_from_description(description),
+            "acceptance_criteria_raw": raw_ac,
+            "acceptance_criteria": _criteria_from_text(raw_ac),
+            "scenarios": _criteria_from_text(description),
             "source": "ADO dummy project",
         }
     )
     return record
 
 
-def _scenarios_from_description(description: str) -> list[dict]:
-    scenarios = []
-    title = None
-    expected_lines = []
+_AC_LABEL = re.compile(r"^(AC-\d+)\b[:\s-]*(.*)$", re.IGNORECASE)
 
-    def append_scenario() -> None:
+
+def _plain_lines(value: str) -> list[str]:
+    """Turn an ADO HTML field into the lines a scenario splitter can read."""
+    text = html.unescape(value or "")
+    text = text.replace("\xa0", " ")
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</(div|p|li|tr|h[1-6])>", "\n", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    lines = []
+    for raw_line in text.splitlines():
+        line = re.sub(r"[ \t]+", " ", raw_line).strip()
+        if line:
+            lines.append(line)
+    return lines
+
+
+def _criteria_from_text(value: str) -> list[dict]:
+    """Split Scenario / Expected text. An AC-01 label in the title is kept as ac_id."""
+    criteria = []
+    title = None
+    body_lines: list[str] = []
+
+    def append_criterion() -> None:
         if not title:
             return
-        expected = " ".join(expected_lines)
-        text = f"{title}. {expected}" if expected else title
-        scenarios.append(
-            {
-                "ac_id": f"AC-{len(scenarios) + 1}",
-                "text": text,
-                "testable": bool(expected),
-                "flags": [],
-            }
-        )
+        body = " ".join(line for line in body_lines if line).strip()
+        criteria.append(_criterion(title, body, len(criteria) + 1))
 
-    for raw_line in description.splitlines():
-        line = raw_line.strip()
+    for line in _plain_lines(value):
         if line.startswith("Scenario:"):
-            append_scenario()
+            append_criterion()
             title = line.removeprefix("Scenario:").strip()
-            expected_lines = []
+            body_lines = []
         elif title and line.startswith(("Expected:", "Expected result:")):
-            expected_lines.append(line.partition(":")[2].strip())
+            body_lines.append(line.partition(":")[2].strip())
+        elif title:
+            body_lines.append(line)
 
-    append_scenario()
-    return scenarios
+    append_criterion()
+    return criteria
+
+
+def _criterion(title: str, body: str, index: int) -> dict:
+    match = _AC_LABEL.match(title)
+    if match:
+        ac_id = match.group(1).upper()
+        name = match.group(2).strip() or title
+    else:
+        ac_id = f"AC-{index}"
+        name = title
+    return {
+        "ac_id": ac_id,
+        "text": f"{name}. {body}" if body else name,
+        "testable": bool(body),
+        "flags": [],
+    }
 
 
 def _tests_from_adapter(fixture_tests: object, adapter_rows: list) -> list:
@@ -210,19 +310,51 @@ def _tests_from_adapter(fixture_tests: object, adapter_rows: list) -> list:
 
 
 def validate_contract(state: GraphState) -> dict:
+    _notify(state, "validating fetched data")
     errors = _contract_errors(state.get("record"), state.get("story_id"))
     if errors:
         raise ContractError("; ".join(errors))
+    _notify(state, "data contract valid")
     return {}
 
 
 def score_health(state: GraphState) -> dict:
+    if state.get("live"):
+        record = state["record"]
+        progress = state.get("progress")
+        # Keep compatibility with integrations that replace analyze_live with
+        # a legacy one-argument test double.
+        if "progress" in inspect.signature(analyze_live).parameters:
+            result = analyze_live(record, progress=progress)
+        else:
+            result = analyze_live(record)
+        _notify(state, "live score assembled from model-predicted AC links")
+        return {
+            "record": record,
+            "score": result["score"],
+            "narrative": result["narrative"],
+            "token_count": result["token_count"],
+            "narrative_latency_ms": result["narrative_latency_ms"],
+        }
+    _notify(state, "calculating deterministic score")
     return {"score": score_record(state["record"])}
 
 
 def write_narrative(state: GraphState) -> dict:
-    """One model call. The node passes the score object and nothing else."""
+    """Offline, one narrative call over the score. Live, per-criterion analysis already ran."""
+    if state.get("live"):
+        _notify(state, "using the validated live analysis narrative")
+        narrative = state.get("narrative")
+        if not isinstance(narrative, dict):
+            raise NarrativeError("live analysis did not return a narrative")
+        return {
+            "narrative": narrative,
+            "token_count": state.get("token_count", 0),
+            "narrative_latency_ms": state.get("narrative_latency_ms", 0),
+        }
+    _notify(state, "asking the model for the report narrative")
     result = request_narrative(state["score"])
+    _notify(state, "narrative accepted")
     return {
         "narrative": result["narrative"],
         "token_count": result["token_count"],
@@ -232,7 +364,9 @@ def write_narrative(state: GraphState) -> dict:
 
 def render_pdf(state: GraphState) -> dict:
     """Write both reports from the same score, narrative, and fixture record."""
-    _validate_narrative_counts(state["score"], state["narrative"])
+    _notify(state, "rendering Markdown and PDF reports")
+    if not state.get("live"):
+        _validate_narrative_counts(state["score"], state["narrative"])
     output_dir = artifacts_dir()
     template = _template_path()
     markdown_path = output_dir / f"{state['story_id']}.md"
@@ -251,69 +385,13 @@ def render_pdf(state: GraphState) -> dict:
         markdown_path,
         record=state.get("record"),
     )
+    _notify(state, f"reports written to {markdown_path} and {pdf_path}")
     return {"markdown_path": str(markdown_path), "pdf_path": str(pdf_path)}
 
 
 def _validate_narrative_counts(score: dict, narrative: dict) -> None:
     """Reject explicit narrative counts or coverage claims that conflict with the score."""
-    strings = [narrative.get("headline", "")]
-    sections = narrative.get("sections", [])
-    if isinstance(sections, list):
-        for section in sections:
-            if isinstance(section, str):
-                strings.append(section)
-            elif isinstance(section, dict):
-                strings.extend((section.get("name", ""), section.get("prose", section.get("text", ""))))
-    actions = narrative.get("actions", [])
-    if isinstance(actions, list):
-        strings.extend(action.get("text", action.get("action", "")) for action in actions if isinstance(action, dict))
-    text = "\n".join(value for value in strings if isinstance(value, str))
-    checks = (
-        ("scenario_count", r"\b(\d+)\s+(?:scenarios?|acceptance criteria)\b"),
-        ("test_count", r"\b(\d+)\s+(?:tests?|test cases?)\b"),
-        ("mapped_count", r"\b(\d+)\s+mapped(?:\s+(?:ACs?|tests?))?\b"),
-        ("bug_count", r"\b(\d+)\s+bugs?\b"),
-    )
-    for key, pattern in checks:
-        expected = score.get(key)
-        if isinstance(expected, int):
-            for match in re.finditer(pattern, text, flags=re.IGNORECASE):
-                if int(match.group(1)) != expected:
-                    raise NarrativeError(
-                        f"narrative {key} {match.group(1)} does not match score {expected}"
-                    )
-    mapped_count = score.get("mapped_count")
-    if isinstance(mapped_count, int):
-        for match in re.finditer(
-            r"\bmapped(?:\s+ACs?|\s+tests?)?\s*(?:count)?\s*[:=]\s*(\d+)\b",
-            text,
-            flags=re.IGNORECASE,
-        ):
-            if int(match.group(1)) != mapped_count:
-                raise NarrativeError(
-                    f"narrative mapped_count {match.group(1)} does not match score {mapped_count}"
-                )
-    health = score.get("health")
-    if isinstance(health, str) and re.search(r"\bstory health\s*(?:is|:)\s*([^.!\n]+)", text, re.IGNORECASE):
-        match = re.search(r"\bstory health\s*(?:is|:)\s*([^.!\n]+)", text, re.IGNORECASE)
-        assert match is not None
-        if match.group(1).strip().casefold() != health.casefold():
-            raise NarrativeError("narrative story health does not match the score")
-    if score.get("mapped_count") == 0 and re.search(
-        r"\b(?:AC[-\w]*|acceptance criteria)\s+(?:is|are)\s+covered\b",
-        text,
-        re.IGNORECASE,
-    ):
-        raise NarrativeError("narrative claims coverage absent from the score")
-    rag = score.get("rag")
-    if isinstance(rag, str):
-        match = re.search(
-            r"\b(?:RAG|coverage)\s*(?:is|:)\s*(Red|Amber|Green)\b",
-            text,
-            re.IGNORECASE,
-        )
-        if match and match.group(1).casefold() != rag.casefold():
-            raise NarrativeError("narrative RAG does not match the score")
+    enforce_narrative_rules(score, narrative)
 
 
 def artifacts_dir() -> Path:
