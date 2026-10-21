@@ -16,6 +16,7 @@ from story_guard.render import (
     validate_template,
 )
 from story_guard.score import score_health as score_record
+from story_guard.security import review_and_redact
 from story_guard.test_adapter import DummyTestAdapterError, fetch_tests
 
 # Keys and the test-type enum are the ones named in fixtures/SCHEMA.md.
@@ -104,11 +105,8 @@ def gate_input(state: GraphState) -> dict:
     live = state.get("live", False)
     if not isinstance(live, bool):
         raise GateError("live flag must be a boolean")
-    if live:
-        if int(story_id) <= 0:
-            raise GateError("live story id must be a positive integer")
-    elif story_id != _ACCEPTED_STORY_ID:
-        raise GateError(f"story id {story_id} is not in the fixture")
+    if live and int(story_id) <= 0:
+        raise GateError("live story id must be a positive integer")
     validate_template(_template_path())
     return {"story_id": story_id, "live": live}
 
@@ -122,7 +120,15 @@ def fetch(state: GraphState) -> dict:
         record = state.get("live_record")
         if not isinstance(record, dict):
             record = load_live_story(story_id)
-        return {"record": record}
+        sanitized_record, findings = review_and_redact(record)
+        sanitized_record["security_findings"] = findings
+        return {"record": sanitized_record}
+
+    if story_id != _ACCEPTED_STORY_ID:
+        record = _empty_story_record(story_id, source="fixture", not_found=True)
+        sanitized_record, findings = review_and_redact(record)
+        sanitized_record["security_findings"] = findings
+        return {"record": sanitized_record}
 
     path = _repo_root() / "fixtures" / "FIX-121213.json"
     try:
@@ -139,7 +145,29 @@ def fetch(state: GraphState) -> dict:
     except DummyTestAdapterError as exc:
         raise ContractError(str(exc)) from exc
     record["tests"] = _tests_from_adapter(record.get("tests"), adapter_rows)
-    return {"record": record}
+    sanitized_record, findings = review_and_redact(record)
+    sanitized_record["security_findings"] = findings
+    return {"record": sanitized_record}
+
+
+def _empty_story_record(story_id: str, *, source: str, not_found: bool) -> dict:
+    return {
+        "id": story_id,
+        "title": "",
+        "type": "User Story",
+        "state": "",
+        "description": "",
+        "area": "",
+        "iteration": "",
+        "acceptance_criteria_raw": "",
+        "acceptance_criteria": [],
+        "scenarios": [],
+        "tests": [],
+        "bugs": [],
+        "note": "",
+        "source": source,
+        "not_found": not_found,
+    }
 
 
 def load_live_story(
@@ -159,6 +187,12 @@ def load_live_story(
         raise ADOResponseError(f"ADO story {story_id} response is invalid")
     if "error" in story_bundle:
         error = story_bundle.get("error")
+        if isinstance(error, dict) and error.get("code") == "not_found":
+            return _empty_story_record(
+                story_id,
+                source="Azure DevOps live data",
+                not_found=True,
+            )
         message = error.get("message") if isinstance(error, dict) else None
         raise ADOResponseError(message or f"Could not load ADO story {story_id}")
 
@@ -277,8 +311,15 @@ def score_health(state: GraphState) -> dict:
 
 
 def write_narrative(state: GraphState) -> dict:
-    """One model call. The node passes the score object and nothing else."""
-    result = request_narrative(state["score"])
+    """Write narrative prose unless the story does not exist."""
+    score = state["score"]
+    if score.get("record_status") == "not_found":
+        return {
+            "narrative": {"headline": "", "sections": [], "actions": []},
+            "token_count": 0,
+            "narrative_latency_ms": 0,
+        }
+    result = request_narrative(score)
     return {
         "score": result["score"],
         "narrative": result["narrative"],

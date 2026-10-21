@@ -117,7 +117,8 @@ def test_generate_writes_eight_headings_and_score_pdf(tmp_path, monkeypatch, cap
     assert "Bug ID" in text and "Assigned To" in text
     assert "No bugs." in text
     assert "partially covered" not in text
-    assert "%" not in text
+    assert "Avg testcase coverage: 0%" in text
+    assert "| AC ID | Acceptance Criteria | Linked Test IDs | Coverage depth | Coverage gap |" in text
     printed = capsys.readouterr().out.strip()
     assert printed == str(report)
     pdf_text = pdf.read_bytes()
@@ -162,7 +163,7 @@ def test_score_command_does_not_call_the_model(monkeypatch, capsys):
     capsys.readouterr()
 
 
-@pytest.mark.parametrize("story_id", ["999999", "abc", ""])
+@pytest.mark.parametrize("story_id", ["abc", ""])
 def test_bad_story_id_writes_no_report(tmp_path, monkeypatch, capsys, story_id):
     monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
 

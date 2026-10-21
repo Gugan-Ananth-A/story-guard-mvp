@@ -127,7 +127,8 @@ def test_render_pdf_uses_score_and_contains_eight_sections(tmp_path: Path) -> No
     assert b"STORY HEALTH" in pdf_bytes
     assert b"AC ID" in pdf_bytes
     assert b"Explicit test IDs" in pdf_bytes
-    assert b"Gap" in pdf_bytes
+    assert b"Coverage depth" in pdf_bytes
+    assert b"Coverage gap" in pdf_bytes
     assert b"Found in Env" in pdf_bytes
     assert b"Page 1" in pdf_bytes
     assert b"#203b5d" not in pdf_bytes

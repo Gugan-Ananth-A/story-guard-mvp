@@ -120,6 +120,7 @@ _EIGHT_SECTION_FIELDS = {
     "title",
     "generated_at",
     "source",
+    "validation_messages",
     "overall_rag",
     "headline",
     "ac_review",
@@ -385,61 +386,127 @@ def _template_values(
     narrative = narrative if isinstance(narrative, dict) else {}
     if "story" in score:
         story = score.get("story") or {}
-        appendix = score.get("appendix") or {}
         coverage = score.get("coverage") or {}
-        story_id = story.get("id", "")
-        title = story.get("title", "")
-        scenario_count = len(score.get("acceptance_criteria") or [])
+        criteria = score.get("acceptance_criteria") or []
+        mappings = {
+            item.get("ac_id"): item.get("test_ids", [])
+            for item in score.get("test_mappings", [])
+            if isinstance(item, dict)
+        }
         test_count = coverage.get("total_tests", 0)
-        mapped_count = coverage.get("mapped_ac_count", 0)
-        bug_count = (score.get("bugs") or {}).get("open_count", 0)
-        coverage_by_type = coverage.get("by_type", {})
-        rag = score.get("rag", "Unavailable in the score object.")
-        health = rag
-        rule_ids = score.get("rule_ids", [])
-        ac_field = "present" if score.get("acceptance_criteria") else "empty"
-        scenario_rows = score.get("acceptance_criteria") or []
-        tests = score.get("test_ids") or []
-        bugs = (score.get("bugs") or {}).get("items", [])
-        ac_ids = appendix.get("ac_ids", [])
-        test_ids = appendix.get("test_ids", tests)
-        bug_ids = appendix.get("bug_ids", [])
-    else:
-        story_id = score.get("story_id", "")
-        title = score.get("title", "")
-        scenario_count = score.get("scenario_count", len(score.get("scenarios") or []))
-        test_count = score.get("test_count", 0)
-        mapped_count = score.get("mapped_count", 0)
-        bug_count = score.get("bug_count", 0)
-        coverage_by_type = score.get("coverage_by_type", {})
-        rag = score.get("rag", "Unavailable in the score object.")
-        health = score.get("health", rag)
-        rule_ids = score.get("rule_ids", [])
-        ac_field = score.get("ac_field", "unavailable")
-        scenario_rows = score.get("scenarios", [])
-        tests = (record or {}).get("tests", [])
-        bugs = score.get("bugs", [])
-        ac_ids = [row.get("ac_id", "") for row in scenario_rows if isinstance(row, dict)]
-        test_ids = [row.get("id", "") for row in tests if isinstance(row, dict)]
-        bug_ids = [row.get("id", "") for row in bugs if isinstance(row, dict)]
-
+        normalized_scenarios = []
+        for criterion in criteria:
+            ac_id = criterion.get("id", "")
+            test_ids_for_criterion = mappings.get(ac_id, [])
+            missing_label = "No Testcases Found" if test_count and not test_ids_for_criterion else ""
+            normalized_scenarios.append(
+                {
+                    "ac_id": ac_id,
+                    "text": criterion.get("text", ""),
+                    "testable": criterion.get("testable", False),
+                    "mapped_test_ids": test_ids_for_criterion,
+                    "depth": missing_label,
+                    "gap": missing_label,
+                    "row_status": "none" if not test_ids_for_criterion else "partial",
+                }
+            )
+        legacy_bugs = (score.get("bugs") or {}).get("items", [])
+        legacy_record = record or {
+            "scenarios": normalized_scenarios,
+            "tests": [{"id": item} for item in score.get("test_ids", [])],
+        }
+        mapped_criteria = sum(bool(row["mapped_test_ids"]) for row in normalized_scenarios)
+        score = {
+            **score,
+            "story_id": story.get("id", ""),
+            "title": story.get("title", ""),
+            "scenario_count": len(criteria),
+            "scenarios": normalized_scenarios,
+            "test_count": test_count,
+            "mapped_count": coverage.get("mapped_ac_count", 0),
+            "bug_count": (score.get("bugs") or {}).get("open_count", 0),
+            "bugs": legacy_bugs,
+            "coverage_by_type": coverage.get("by_type", {}),
+            "ac_field": "present" if criteria else "empty",
+            "average_testcase_coverage": (
+                round(100 * mapped_criteria / len(criteria), 1)
+                if criteria and test_count
+                else 0
+            ),
+        }
+        record = legacy_record
+    story_id = score.get("story_id", "")
+    title = score.get("title", "")
     if generated_at is None:
         generated_at = str(
             score.get("generated_at")
             or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         )
-    scored_scenarios = score.get("scenarios", scenario_rows)
+    validation_messages = list(score.get("validation_messages") or [])
+    security_findings = list(score.get("security_findings") or [])
+    if score.get("record_status") == "not_found":
+        return {
+            "report_title": "Story Health Report",
+            "story_id": str(story_id),
+            "title": "",
+            "generated_at": "",
+            "source": "",
+            "validation_messages": "\n".join(validation_messages),
+            "overall_rag": "",
+            "headline": "",
+            "ac_review": "",
+            "ac_test_mapping": "",
+            "coverage_by_type": "",
+            "bugs": "",
+            "recommended_actions": "",
+            "raw_story_ids": "",
+            "raw_ac_ids": "",
+            "raw_test_ids": "",
+            "raw_bug_ids": "",
+        }
+
+    scenario_rows = score.get("scenarios", [])
     display_scenarios = (record or {}).get("scenarios", scenario_rows)
-    mapping_lines = [f"Mapped ACs: {mapped_count}"]
-    for row in scored_scenarios if isinstance(scored_scenarios, list) else []:
-        if not isinstance(row, dict):
-            continue
-        ac_id = row.get("ac_id", "")
-        links = row.get("mapped_test_ids", row.get("mapped_ac_ids", []))
-        mapping_lines.append(
-            f"{ac_id}: linked tests {', '.join(map(str, links)) if links else 'None'}"
-        )
+    test_count = score.get("test_count", 0)
+    mapped_count = score.get("mapped_count", 0)
+    bug_count = score.get("bug_count", 0)
+    coverage_by_type = score.get("coverage_by_type", {})
+    rag = score.get("rag", "Unavailable in the score object.")
+    health = score.get("health", rag)
+    rule_ids = score.get("rule_ids", [])
+    ac_field = score.get("ac_field", "unavailable")
+    bugs = score.get("bugs", [])
+    tests = (record or {}).get("tests", [])
+    ac_ids = [row.get("ac_id", "") for row in scenario_rows if isinstance(row, dict)]
+    test_ids = [row.get("id", "") for row in tests if isinstance(row, dict)]
+    bug_ids = [row.get("id", "") for row in bugs if isinstance(row, dict)]
+    scenario_count = score.get("scenario_count", len(scenario_rows))
+
+    def table_cell(value: object) -> str:
+        return str(value or "").replace("|", "\\|").replace("\n", "<br>")
+
+    mapping_lines = [
+        "| AC ID | Acceptance Criteria | Linked Test IDs | Coverage depth | Coverage gap |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    scored_scenarios = score.get("scenarios", [])
+    for source_row, scored_row in zip(display_scenarios, scored_scenarios):
+        if isinstance(source_row, dict) and isinstance(scored_row, dict):
+            mapping_lines.append(
+                "| " + " | ".join(
+                    table_cell(value)
+                    for value in (
+                        source_row.get("ac_id", scored_row.get("ac_id", "")),
+                        source_row.get("text", ""),
+                        ", ".join(scored_row.get("mapped_test_ids", [])),
+                        scored_row.get("depth", ""),
+                        scored_row.get("gap", ""),
+                    )
+                ) + " |"
+            )
+    coverage_percent = score.get("average_testcase_coverage", 0)
     coverage_lines = [
+        f"Avg testcase coverage: {coverage_percent:g}%",
         f"{scenario_count} acceptance criteria | {score.get('adequate_count', 0)} adequately covered | {score.get('partial_count', 0)} with gaps | {score.get('none_count', 0)} not covered",
         f"Total tests: {test_count}",
         f"Tests: {test_count}. Mapped: {mapped_count}. Bugs: {bug_count}.",
@@ -451,10 +518,6 @@ def _template_values(
     for row in display_scenarios if isinstance(display_scenarios, list) else []:
         if isinstance(row, dict):
             ac_lines.append(f"{row.get('ac_id', '')}: {row.get('text', row.get('depth', ''))}")
-    if isinstance(coverage_by_type, dict):
-        coverage_lines.append(
-            f"Test count: {test_count}; mapped AC count: {mapped_count}; bug count: {bug_count}"
-        )
     bug_lines = [
         " | ".join(name for name, _key in _BUG_COLUMNS),
         f"Bugs: {bug_count}",
@@ -483,12 +546,14 @@ def _template_values(
     note = score.get("note")
     if isinstance(note, str) and note.strip():
         overall_rag += f"\nNote: {note}"
+    notices = [*validation_messages, *(f"Security review: {finding}" for finding in security_findings)]
     return {
         "report_title": "Story Health Report",
         "story_id": str(story_id),
         "title": str(title),
         "generated_at": generated_at,
         "source": str(source),
+        "validation_messages": "\n".join(notices),
         "overall_rag": overall_rag,
         "headline": str(headline),
         "ac_review": "\n".join(ac_lines),
@@ -608,6 +673,36 @@ def _styled_report_flowables(
         ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
     ]))
 
+    validation_text = values.get("validation_messages", "")
+    validation_panel = None
+    if validation_text:
+        validation_panel = Table([[body(validation_text)]], colWidths=[6.85 * inch])
+        validation_panel.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fff4d6")),
+            ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#d6a84f")),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+
+    if score.get("record_status") == "not_found":
+        flowables: list[Any] = [title_band, Spacer(1, 5)]
+        if validation_panel is not None:
+            flowables.append(validation_panel)
+        for section in (
+            "Title block",
+            "Overall RAG",
+            "AC review",
+            "AC ↔ test mapping",
+            "Coverage by type",
+            "Bugs",
+            "Recommended actions",
+            "Appendix",
+        ):
+            flowables.extend([heading(section), body("")])
+        return flowables
+
     count_values = [
         ("SCENARIOS", score.get("scenario_count", 0), colors.HexColor("#5388b8")),
         ("TESTS", score.get("test_count", 0), colors.HexColor("#357a8a")),
@@ -634,15 +729,16 @@ def _styled_report_flowables(
         ("BOTTOMPADDING", (0, 1), (-1, 1), 5),
     ]))
 
-    flowables: list[Any] = [
-        title_band,
-        Spacer(1, 5),
+    flowables = [title_band, Spacer(1, 5)]
+    if validation_panel is not None:
+        flowables.extend([validation_panel, Spacer(1, 5)])
+    flowables.extend([
         body("User story health, test coverage, and defect status."),
         metrics,
         heading("Title block"),
         body(f"Project: {_cell((record or {}).get('area')) or 'Not provided'}"),
         heading("Overall RAG"),
-    ]
+    ])
     rag_panel = Table(
         [[Paragraph(f"<b>{escape(rag)}</b>", ParagraphStyle(
             "RagValue", parent=body_style, fontName="Helvetica-Bold", fontSize=13,
@@ -682,16 +778,30 @@ def _styled_report_flowables(
         ])
     flowables.append(_data_table(ac_rows, [0.7 * inch, 5.65 * inch, 0.5 * inch], header=True))
     flowables.extend([heading("AC ↔ test mapping")])
-    mapping_rows = [[small("AC ID"), small("Explicit test IDs"), small("Gap")]]
+    mapping_rows = [[
+        small("AC ID"),
+        small("Acceptance Criteria"),
+        small("Explicit test IDs"),
+        small("Coverage depth"),
+        small("Coverage gap"),
+    ]]
     scored_rows = score.get("scenarios", [])
-    for scenario in scored_rows:
+    for scenario, scored_row in zip(source_scenarios, scored_rows):
         mapping_rows.append([
-            small(scenario.get("ac_id", "")),
-            small(", ".join(scenario.get("mapped_test_ids", [])) or "None"),
-            small(scenario.get("gap", "No coverage")),
+            small(scenario.get("ac_id", scored_row.get("ac_id", ""))),
+            small(scenario.get("text", "")),
+            small(", ".join(scored_row.get("mapped_test_ids", []))),
+            small(scored_row.get("depth", "")),
+            small(scored_row.get("gap", "")),
         ])
-    flowables.append(_data_table(mapping_rows, [0.7 * inch, 2.15 * inch, 4.0 * inch], header=True))
+    flowables.append(_data_table(
+        mapping_rows,
+        [0.55 * inch, 1.65 * inch, 1.15 * inch, 1.7 * inch, 1.8 * inch],
+        header=True,
+        compact=True,
+    ))
 
+    coverage_percent = score.get("average_testcase_coverage", 0)
     flowables.extend([
         heading("Coverage by type"),
         body(
@@ -699,6 +809,7 @@ def _styled_report_flowables(
             f"Mapped ACs: {score.get('mapped_count', 0)} | "
             f"Bugs: {score.get('bug_count', 0)}"
         ),
+        body(f"Avg testcase coverage: {coverage_percent:g}%"),
     ])
     coverage_counts = score.get("coverage_by_type", {})
     coverage_rows = [[small("Type"), small("Count")]] + [

@@ -6,6 +6,8 @@ Title: {{ title }}
 Generated at: {{ generated_at }}  
 Source: {{ source }}
 
+{{ validation_messages }}
+
 ## Overall RAG
 
 {{ overall_rag }}

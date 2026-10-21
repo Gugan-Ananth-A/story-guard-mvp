@@ -12,6 +12,10 @@ _SCORE_KEYS = {
     "story_id",
     "title",
     "source",
+    "record_status",
+    "validation_messages",
+    "security_findings",
+    "average_testcase_coverage",
     "ac_field",
     "scenario_count",
     "scenarios",
@@ -60,8 +64,12 @@ def test_score_fixture_counts():
     for row in score["scenarios"]:
         mapped_ids.update(row["mapped_test_ids"])
     assert mapped_ids == set()
-    assert all(row["depth"] == "None" for row in score["scenarios"])
-    assert all(row["gap"] == "No coverage" for row in score["scenarios"])
+    assert all(row["depth"] == "No Testcases Found" for row in score["scenarios"])
+    assert all(row["gap"] == "No Testcases Found" for row in score["scenarios"])
+    assert score["average_testcase_coverage"] == 0
+    assert score["record_status"] == "present"
+    assert score["validation_messages"] == []
+    assert score["security_findings"] == []
     assert all(row["row_status"] == "none" for row in score["scenarios"])
     assert score["test_count"] == 18
     assert len(score["test_cases"]) == 18
