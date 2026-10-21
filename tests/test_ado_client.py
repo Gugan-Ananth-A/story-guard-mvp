@@ -56,19 +56,31 @@ class ADOClientTests(unittest.TestCase):
             ),
         )
 
-    def test_from_env_reads_project_url_and_pat(self) -> None:
+    def test_from_env_uses_only_the_configured_project_url_and_pat(self) -> None:
+        project_url = "https://dev.azure.com/contoso/Orders%20Portal"
+        captured = {}
+
+        def opener(request, timeout):
+            captured["request"] = request
+            return BytesIO(json.dumps({"children": []}).encode("utf-8"))
+
         with patch.dict(
             "os.environ",
             {
-                "ADO_PROJECT_URL": "https://dev.azure.com/storyguard/sample",
+                "ADO_PROJECT_URL": project_url,
                 "ADO_PAT": "offline-test-pat",
             },
             clear=True,
-        ):
+        ), patch("story_guard.ado_client.urlopen", opener):
             client = ADOClient.from_env()
+            self.assertEqual(client.list_iterations(), [])
 
-        self.assertEqual(client.project_url, "https://dev.azure.com/storyguard/sample")
+        self.assertEqual(client.project_url, project_url)
         self.assertEqual(client.pat, "offline-test-pat")
+        request_url = captured["request"].full_url
+        self.assertTrue(request_url.startswith(project_url + "/_apis/"))
+        self.assertNotIn("rootquotient", request_url)
+        self.assertNotIn("Ecom", request_url)
 
     def test_get_story_requests_relations_and_uses_pat_header(self) -> None:
         captured = {}
