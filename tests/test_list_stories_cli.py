@@ -189,6 +189,8 @@ def test_generate_sprint_runs_each_story_with_its_own_plan(
 ):
     from story_guard.graph import load_live_story
 
+    monkeypatch.delenv("ADO_PAT", raising=False)
+
     def story_bundle(story_id, test_cases):
         return {
             "id": str(story_id),

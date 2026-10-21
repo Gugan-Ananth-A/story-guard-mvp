@@ -175,6 +175,9 @@ class ADOClient:
                 payload = self._get_work_item_payload(
                     story_id, expand_relations=True
                 )
+                fields = payload.get("fields")
+                if isinstance(fields, dict) and fields.get("System.WorkItemType") == "Bug":
+                    continue
                 story = map_ado_work_item(payload)
             except WorkItemNotFoundError as error:
                 results.append(

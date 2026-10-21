@@ -347,6 +347,10 @@ class ADOClientTests(unittest.TestCase):
                     "System.Description": "",
                 },
             },
+            50: {
+                "id": 50,
+                "fields": {"System.WorkItemType": "Test Case", "System.Title": "Not a story"},
+            },
         }
 
         def opener(request, timeout):
@@ -356,9 +360,11 @@ class ADOClientTests(unittest.TestCase):
                 raise HTTPError(request.full_url, 404, "Not Found", {}, BytesIO())
             return BytesIO(json.dumps(payloads[item_id]).encode("utf-8"))
 
-        results = self.make_client(opener).fetch_many_stories([10, 20, 30, 40])
+        client = self.make_client(opener)
+        with patch.dict("os.environ", {}, clear=True):
+            results = client.fetch_many_stories([10, 20, 30, 50, 40])
 
-        self.assertEqual([result["id"] for result in results], ["10", "20", "30", "40"])
+        self.assertEqual([result["id"] for result in results], ["10", "20", "50", "40"])
         self.assertEqual(results[0]["story"]["title"], "Login story")
         self.assertEqual([bug["id"] for bug in results[0]["bugs"]], ["301"])
         self.assertEqual(results[0]["bugs"][0]["linked_story_id"], "10")
@@ -375,7 +381,7 @@ class ADOClientTests(unittest.TestCase):
         self.assertTrue(all(request.get_method() == "GET" for request in requests))
         self.assertEqual(
             [int(urlsplit(request.full_url).path.rsplit("/", 1)[-1]) for request in requests],
-            [10, 301, 401, 402, 20, 30, 40],
+            [10, 301, 401, 402, 20, 30, 50, 40],
         )
 
     def test_fetch_many_stories_rejects_invalid_ids_before_request(self) -> None:
