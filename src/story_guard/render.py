@@ -479,13 +479,17 @@ def _template_values(
     source = score.get("source", "fixture")
     if source == "fixture":
         source = "dummy fixture"
+    overall_rag = f"{rag}\nStory health: {health}\nRules: {rule_text}\n{narrative_prose}"
+    note = score.get("note")
+    if isinstance(note, str) and note.strip():
+        overall_rag += f"\nNote: {note}"
     return {
         "report_title": "Story Health Report",
         "story_id": str(story_id),
         "title": str(title),
         "generated_at": generated_at,
         "source": str(source),
-        "overall_rag": f"{rag}\nStory health: {health}\nRules: {rule_text}\n{narrative_prose}",
+        "overall_rag": overall_rag,
         "headline": str(headline),
         "ac_review": "\n".join(ac_lines),
         "ac_test_mapping": "\n".join(mapping_lines),
@@ -665,7 +669,7 @@ def _styled_report_flowables(
     if narrative_text:
         flowables.append(body(narrative_text))
     if score.get("note"):
-        flowables.extend([Spacer(1, 4), small(f"Fixture note: {score['note']}")])
+        flowables.extend([Spacer(1, 4), small(f"Note: {score['note']}")])
 
     flowables.extend([heading("AC review"), body(values["ac_review"])])
     ac_rows = [[small("AC ID"), small("Acceptance scenario"), small("Testable")]]

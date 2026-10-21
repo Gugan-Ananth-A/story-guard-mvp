@@ -265,12 +265,11 @@ def test_default_generate_never_constructs_ado_client(tmp_path, monkeypatch, cap
     capsys.readouterr()
 
 
-def test_live_generate_uses_ado_story_and_fixture_tests(tmp_path, monkeypatch, capsys):
+def test_live_generate_uses_only_explicit_plan_linked_tests(tmp_path, monkeypatch, capsys):
     import json
 
     from story_guard import graph
     from story_guard.ado_client import ADOClient, StoryRecord
-    from story_guard.test_adapter import fetch_tests as read_fixture_tests
 
     fixture_record = json.loads((ROOT / "fixtures" / "FIX-121213.json").read_text())
     live_story = StoryRecord(
@@ -286,23 +285,29 @@ def test_live_generate_uses_ado_story_and_fixture_tests(tmp_path, monkeypatch, c
         notes=[],
     )
     ado_calls = []
-    test_adapter_calls = []
+    plan_lookup_calls = []
 
     class FakeADOClient:
-        def get_story(self, work_item_id):
-            ado_calls.append(work_item_id)
-            return live_story
+        def fetch_many_stories(self, story_ids):
+            ado_calls.extend(story_ids)
+            return [
+                {
+                    "id": "121213",
+                    "story": live_story.to_dict(),
+                    "bugs": [],
+                    "test_cases": [],
+                }
+            ]
 
-    def fetch_fixture_tests(story_id):
-        test_adapter_calls.append(story_id)
-        return read_fixture_tests(story_id)
+        def test_case_plan_memberships(self, test_case_ids):
+            plan_lookup_calls.append(test_case_ids)
+            return {}
 
     monkeypatch.setattr(
         ADOClient,
         "from_env",
         classmethod(lambda cls: FakeADOClient()),
     )
-    monkeypatch.setattr(graph, "fetch_tests", fetch_fixture_tests)
     monkeypatch.setattr(graph, "artifacts_dir", lambda: tmp_path)
     monkeypatch.setattr(graph, "request_narrative", _fake_narrative)
     monkeypatch.setattr("story_guard.cli.record_success", lambda *_args: None)
@@ -311,11 +316,11 @@ def test_live_generate_uses_ado_story_and_fixture_tests(tmp_path, monkeypatch, c
 
     report = (tmp_path / "121213.md").read_text(encoding="utf-8")
     assert ado_calls == [121213]
-    assert test_adapter_calls == ["121213"]
+    assert plan_lookup_calls == [[]]
     assert "Title: Live ADO Login Screen" in report
-    assert "Source: ADO dummy project" in report
-    assert "8 acceptance criteria | 0 adequately covered | 0 with gaps | 8 not covered" in report
-    assert "Tests: 18. Mapped: 0. Bugs: 0." in report
+    assert "Source: Azure DevOps live data" in report
+    assert "No explicitly linked Test Plan was found" in report
+    assert "Tests: 0. Mapped: 0. Bugs: 0." in report
     capsys.readouterr()
 
 
@@ -336,7 +341,7 @@ def test_live_ado_errors_exit_nonzero_without_report(
     )
 
     class FailedADOClient:
-        def get_story(self, _work_item_id):
+        def fetch_many_stories(self, _story_ids):
             raise exception
 
     monkeypatch.setattr(
@@ -352,6 +357,18 @@ def test_live_ado_errors_exit_nonzero_without_report(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert str(exception) in captured.err
+
+
+def test_sprint_without_ado_configuration_exits_cleanly(monkeypatch, capsys):
+    monkeypatch.delenv("ADO_PROJECT_URL", raising=False)
+    monkeypatch.delenv("ADO_PAT", raising=False)
+
+    result = main(["generate", "--sprint", "Project\\Sprint"])
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert captured.out == ""
+    assert "ADO_PROJECT_URL, ADO_PAT" in captured.err
 
 
 def test_generate_path_does_not_name_ado_pat():

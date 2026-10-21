@@ -43,6 +43,27 @@ def test_score_gate_rejects_before_fetch(monkeypatch, story_id):
         run({"story_id": story_id})
 
 
+def test_live_score_accepts_non_fixture_story_with_preloaded_live_record():
+    record = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    record["id"] = "121214"
+    record["source"] = "Azure DevOps live data"
+    record["tests"] = []
+    record["note"] = "No explicitly linked Test Plan was found."
+
+    state = run(
+        {
+            "story_id": "121214",
+            "live": True,
+            "live_record": record,
+        }
+    )
+
+    assert state["record"]["id"] == "121214"
+    assert state["score"]["story_id"] == "121214"
+    assert state["score"]["test_count"] == 0
+    assert state["score"]["note"] == "No explicitly linked Test Plan was found."
+
+
 def test_score_contract_stops_before_score(monkeypatch):
     record = json.loads(FIXTURE.read_text(encoding="utf-8"))
     del record["tests"]

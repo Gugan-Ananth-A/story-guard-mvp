@@ -151,6 +151,51 @@ class ADOClientTests(unittest.TestCase):
         with self.assertRaisesRegex(ADOConfigurationError, "ADO_PAT cannot read"):
             self.make_client(opener).list_iterations()
 
+    def test_test_case_plan_memberships_follow_each_cases_suite_and_plan(self) -> None:
+        requests = []
+
+        def opener(request, timeout):
+            requests.append(request)
+            path = urlsplit(request.full_url).path.lower()
+            query = parse_qs(urlsplit(request.full_url).query)
+            if path.endswith("/_apis/testplan/plans"):
+                payload = {"value": [{"id": 121214}, {"id": 765432}]}
+            elif path.endswith("/_apis/testplan/plans/121214/suites"):
+                payload = {"value": [{"id": 121215, "children": [{"id": 121216}]}]}
+            elif path.endswith("/_apis/testplan/plans/765432/suites"):
+                payload = {"value": [{"id": 765433}]}
+            elif path.endswith("/_apis/test/plans/121214/suites/121215/points"):
+                payload = {
+                    "value": [
+                        {"testCase": {"id": 501}},
+                        {"testCase": {"id": 999}},
+                    ]
+                }
+            elif path.endswith("/_apis/test/plans/121214/suites/121216/points"):
+                payload = {"value": [{"testCase": {"id": 502}}]}
+            elif path.endswith("/_apis/test/plans/765432/suites/765433/points"):
+                payload = {"value": [{"testCase": {"id": 777}}]}
+            else:
+                self.fail(f"unexpected request: {request.full_url}")
+            self.assertEqual(query["api-version"][0], "7.1" if "/points" in path else "7.1-preview.1")
+            return BytesIO(json.dumps(payload).encode("utf-8"))
+
+        memberships = self.make_client(opener).test_case_plan_memberships([501, 502, 777])
+
+        self.assertEqual(
+            memberships,
+            {"501": [121214], "502": [121214], "777": [765432]},
+        )
+        self.assertEqual(len(requests), 6)
+        self.assertTrue(
+            all(request.get_method() == "GET" for request in requests)
+        )
+
+    def test_test_case_plan_memberships_skips_project_lookup_for_empty_list(self) -> None:
+        client = self.make_client(lambda request, timeout: self.fail("request ran"))
+
+        self.assertEqual(client.test_case_plan_memberships([]), {})
+
     def test_list_user_stories_pages_by_id_and_excludes_other_types(self) -> None:
         requests = []
         pages = {0: [11, 12], 12: [13, 14], 14: []}

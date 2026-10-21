@@ -466,6 +466,121 @@ class ADOClient:
 
         return stories
 
+    def test_case_plan_memberships(
+        self, test_case_ids: List[int]
+    ) -> Dict[str, List[int]]:
+        """Map linked test cases to plans through their Test Point suite membership."""
+        if not isinstance(test_case_ids, list) or any(
+            isinstance(test_case_id, bool)
+            or not isinstance(test_case_id, int)
+            or test_case_id <= 0
+            for test_case_id in test_case_ids
+        ):
+            raise ADOConfigurationError(
+                "test case IDs must be a list of positive integers"
+            )
+        target_ids = {str(test_case_id) for test_case_id in test_case_ids}
+        memberships: Dict[str, List[int]] = {test_case_id: [] for test_case_id in target_ids}
+        if not target_ids:
+            return memberships
+
+        plans_query = urlencode({"api-version": "7.1-preview.1"})
+        plans_request = Request(
+            f"{self.project_url}/_apis/testplan/plans?{plans_query}",
+            headers=self._headers(),
+        )
+        plans_payload = self._request_json(plans_request, "test plan list")
+        plans = plans_payload.get("value")
+        if not isinstance(plans, list):
+            raise ADOResponseError("ADO test plan response is missing its value list")
+
+        for plan in plans:
+            if not isinstance(plan, dict):
+                raise ADOResponseError("ADO test plan response contains an invalid plan")
+            plan_id = plan.get("id")
+            if isinstance(plan_id, bool) or not isinstance(plan_id, int) or plan_id <= 0:
+                raise ADOResponseError("ADO test plan response contains an invalid ID")
+
+            suite_query = urlencode(
+                {"$depth": 14, "api-version": "7.1-preview.1"}
+            )
+            suite_request = Request(
+                f"{self.project_url}/_apis/testplan/Plans/{plan_id}/suites?{suite_query}",
+                headers=self._headers(),
+            )
+            suite_payload = self._request_json(suite_request, "test suite list")
+            suites = suite_payload.get("value")
+            if not isinstance(suites, list):
+                raise ADOResponseError("ADO test suite response is missing its value list")
+
+            pending = list(reversed(suites))
+            suite_ids = []
+            while pending:
+                suite = pending.pop()
+                if not isinstance(suite, dict):
+                    raise ADOResponseError(
+                        "ADO test suite response contains an invalid suite"
+                    )
+                suite_id = suite.get("id")
+                if isinstance(suite_id, bool) or not isinstance(suite_id, int) or suite_id <= 0:
+                    raise ADOResponseError("ADO test suite response contains an invalid ID")
+                suite_ids.append(suite_id)
+                children = suite.get("children", [])
+                if not isinstance(children, list):
+                    raise ADOResponseError(
+                        "ADO test suite response contains an invalid children list"
+                    )
+                pending.extend(reversed(children))
+
+            for suite_id in suite_ids:
+                offset = 0
+                page_size = 1000
+                while True:
+                    points_query = urlencode(
+                        {
+                            "$skip": offset,
+                            "$top": page_size,
+                            "api-version": ADO_API_VERSION,
+                        }
+                    )
+                    points_request = Request(
+                        f"{self.project_url}/_apis/test/Plans/{plan_id}/Suites/{suite_id}/points?{points_query}",
+                        headers=self._headers(),
+                    )
+                    points_payload = self._request_json(
+                        points_request, "test point list"
+                    )
+                    points = points_payload.get("value")
+                    if not isinstance(points, list):
+                        raise ADOResponseError(
+                            "ADO test point response is missing its value list"
+                        )
+                    for point in points:
+                        if not isinstance(point, dict):
+                            raise ADOResponseError(
+                                "ADO test point response contains an invalid point"
+                            )
+                        test_case = point.get("testCase")
+                        if not isinstance(test_case, dict):
+                            raise ADOResponseError(
+                                "ADO test point is missing its test case"
+                            )
+                        test_case_id = test_case.get("id")
+                        if isinstance(test_case_id, bool) or not isinstance(
+                            test_case_id, (int, str)
+                        ):
+                            raise ADOResponseError(
+                                "ADO test point contains an invalid test case ID"
+                            )
+                        key = str(test_case_id)
+                        if key in target_ids and plan_id not in memberships[key]:
+                            memberships[key].append(plan_id)
+                    if len(points) < page_size:
+                        break
+                    offset += page_size
+
+        return memberships
+
     def _headers(self) -> Dict[str, str]:
         credentials = base64.b64encode(f":{self.pat}".encode("utf-8")).decode("ascii")
         return {
