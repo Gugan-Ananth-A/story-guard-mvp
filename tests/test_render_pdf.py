@@ -13,6 +13,8 @@ from story_guard.render import RenderError, render_markdown, render_pdf
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_SCORE = PROJECT_ROOT / "tests" / "data" / "sample_score.json"
 TEMPLATE = PROJECT_ROOT / "templates" / "health_report.md"
+LIVE_MAPPER_PROMPT = PROJECT_ROOT / "prompts" / "live_map_v1.md"
+SYNTHETIC_STORY = PROJECT_ROOT / "tests" / "data" / "synthetic_story.json"
 
 
 def load_sample_score() -> dict:
@@ -281,3 +283,177 @@ def test_render_pdf_missing_template_leaves_no_partial_output(tmp_path: Path) ->
         render_pdf(hand_built_score(), tmp_path / "missing.md", output_path)
     assert not output_path.exists()
     assert not output_path.with_suffix(".pdf.tmp").exists()
+
+
+def test_live_mapper_prompt_has_no_story_specific_content() -> None:
+    prompt = LIVE_MAPPER_PROMPT.read_text(encoding="utf-8")
+    prohibited_patterns = {
+        "SNAP identifier": re.compile(r"\bSNAP\b", re.IGNORECASE),
+        "test or suite ID": re.compile(r"\b\d{5,}\b"),
+        "sample mapping": re.compile(
+            r"\bAC-\d+\b|\b\d{5,}\b|"
+            r'"mapped_test_ids"\s*:\s*\[\s*["\'][^"\']+["\']'
+        ),
+        "percent sign": re.compile(r"%"),
+        "story-health labels": re.compile(
+            r"\b(?:story health|health band|no open bugs|critical|high|medium|low|"
+            r"at risk|healthy|green|amber|red)\b",
+            re.IGNORECASE,
+        ),
+        "prohibited coverage phrase": re.compile(r"partially covered", re.IGNORECASE),
+    }
+    for description, pattern in prohibited_patterns.items():
+        assert pattern.search(prompt) is None, f"live mapper prompt contains prohibited {description}"
+
+
+def test_live_mapper_prompt_preserves_generic_output_contract() -> None:
+    prompt = LIVE_MAPPER_PROMPT.read_text(encoding="utf-8")
+    for field in (
+        '"ac_id"',
+        '"mapped_test_ids"',
+        '"test_types"',
+        '"coverage_status"',
+        '"quality"',
+        '"finding"',
+    ):
+        assert field in prompt
+    assert "as happy, negative, or adhoc" in prompt
+    assert "exactly one finding sentence" in prompt
+    assert "A shared word between a criterion and a test is not evidence" in prompt
+
+
+def test_pdf_empty_states_are_explicit_and_valid(tmp_path: Path) -> None:
+    from story_guard.score import score_health
+
+    base_record = json.loads(SYNTHETIC_STORY.read_text(encoding="utf-8"))
+    cases = (
+        ("no-criteria", lambda record: record.update(acceptance_criteria=[], acceptance_criteria_raw=""), "No acceptance criteria provided."),
+        ("no-tests", lambda record: record.update(tests=[]), "No tests available."),
+        ("no-bugs", lambda record: record.update(bugs=[]), "No bugs."),
+        (
+            "no-open-bugs",
+            lambda record: record["bugs"][0].update(status="Closed"),
+            "No open bugs",
+        ),
+    )
+    for case_name, change_record, expected_text in cases:
+        record = json.loads(json.dumps(base_record))
+        change_record(record)
+        score = score_health(record)
+        score["generated_at"] = record["generated_at"]
+        output_path = tmp_path / f"{case_name}.pdf"
+
+        render_pdf(score, TEMPLATE, output_path, narrative={}, record=record)
+
+        pdf_bytes = output_path.read_bytes()
+        text = "\n".join(_pdf_page_texts(pdf_bytes))
+        assert pdf_bytes.startswith(b"%PDF-")
+        assert pdf_bytes.rstrip().endswith(b"%%EOF")
+        assert expected_text in text
+        assert "Test suite" not in text
+        assert "1. Portfolio Summary" in text
+        assert "2. Story Health Overview" in text
+        assert "3. Acceptance Criteria vs Test Case Coverage" in text
+        assert "4. Bug Details" in text
+        if case_name == "no-tests":
+            assert "0 tests and 0 mapped." in text
+        if case_name == "no-bugs":
+            assert "0 bugs, with 0 open." in text
+        if case_name == "no-open-bugs":
+            assert "1 bugs, with 0 open." in text
+
+
+def test_synthetic_story_uses_the_existing_dashboard_layout(tmp_path: Path) -> None:
+    from pypdf import PdfReader
+
+    from story_guard.score import score_health
+
+    record = json.loads(SYNTHETIC_STORY.read_text(encoding="utf-8"))
+    assert len(record["acceptance_criteria"]) == 2
+    assert len(record["tests"]) == 3
+    assert len(record["bugs"]) == 1
+    score = score_health(record)
+    score["generated_at"] = record["generated_at"]
+    output_path = tmp_path / "synthetic-story.pdf"
+
+    render_pdf(score, TEMPLATE, output_path, narrative={}, record=record)
+
+    pdf_bytes = output_path.read_bytes()
+    pages = _pdf_page_texts(pdf_bytes)
+    text = "\n".join(pages)
+    assert pdf_bytes.startswith(b"%PDF-")
+    assert pdf_bytes.rstrip().endswith(b"%%EOF")
+    assert len(re.findall(rb"/Type\s*/Page\b", pdf_bytes)) >= 1
+    for marker in (
+        "Portfolio Summary",
+        "Story Health Overview",
+        "Acceptance Criteria vs Test Case Coverage",
+        "Bug Details",
+        "Key Observations",
+        "Gap colour key",
+        "User Stories Assessed",
+        "User Story ID",
+        "Total TC",
+        "Total Bugs",
+        "Coverage Depth (AI)",
+        "Bug ID",
+        "Story Guard",
+        "Page 1 of",
+    ):
+        assert marker in text
+    assert text.index("1. Portfolio Summary") < text.index("2. Story Health Overview")
+    assert text.index("2. Story Health Overview") < text.index(
+        "3. Acceptance Criteria vs Test Case Coverage"
+    )
+    assert text.index("3. Acceptance Criteria vs Test Case Coverage") < text.index("4. Bug Details")
+    assert "Update account contact details" in text
+    assert "SYN-2401" in text
+    assert "Synthetic Accounts" in text
+    assert "Digital Banking" not in text
+    assert "123086" not in text
+    assert "SNAP Login Screen" not in text
+    assert "Ecom MVP" not in text
+    assert "2 acceptance criteria" in text
+    assert "3 tests and 2 mapped." in text
+    assert "1 bugs, with 1 open." in text
+    assert "SYN-AC-001" in text and "SYN-AC-002" in text
+    assert "SYN-BUG-001" in text
+    assert "Test suite" not in text
+
+    reference = PdfReader(PROJECT_ROOT / "artifacts" / "123086.pdf")
+    reference_text = "\n".join(page.extract_text() or "" for page in reference.pages)
+    ordered_sections = (
+        "1. Portfolio Summary",
+        "2. Story Health Overview",
+        "3. Acceptance Criteria vs Test Case Coverage",
+        "4. Bug Details",
+    )
+    assert [text.index(section) for section in ordered_sections] == sorted(
+        text.index(section) for section in ordered_sections
+    )
+    assert [reference_text.index(section) for section in ordered_sections] == sorted(
+        reference_text.index(section) for section in ordered_sections
+    )
+    for marker in ("Project:", "User Story ID", "Total TC", "AC ID", "Bug ID"):
+        assert marker in reference_text
+        assert marker in text
+
+
+def test_missing_bug_data_is_not_reported_as_zero_bugs(tmp_path: Path) -> None:
+    from story_guard.score import score_health
+
+    record = json.loads(SYNTHETIC_STORY.read_text(encoding="utf-8"))
+    score = score_health(record)
+    for key in ("bugs", "bug_count", "open_bug_count", "open_bugs_by_priority"):
+        score.pop(key)
+    output_path = tmp_path / "bugs-unavailable.pdf"
+
+    render_pdf(score, TEMPLATE, output_path, narrative={}, record=record)
+
+    text = "\n".join(_pdf_page_texts(output_path.read_bytes()))
+    assert "Bug information unavailable." in text
+    assert "Open bug count unavailable." in text
+    assert "Unavailable bugs, with Unavailable open." in text
+    assert "Unavailable" in text
+    assert "No bugs." not in text
+    assert "No open bugs" not in text

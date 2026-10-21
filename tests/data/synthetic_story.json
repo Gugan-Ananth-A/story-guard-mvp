@@ -1,0 +1,72 @@
+{
+  "id": "SYN-2401",
+  "title": "Update account contact details",
+  "type": "User Story",
+  "state": "Ready",
+  "description": "A user can update contact information and review the saved profile.",
+  "area": "Synthetic Accounts",
+  "iteration": "Synthetic Sprint",
+  "acceptance_criteria_raw": "present",
+  "acceptance_criteria": [
+    {
+      "ac_id": "SYN-AC-001",
+      "text": "A user can update the contact email with a verified address.",
+      "testable": true,
+      "flags": []
+    },
+    {
+      "ac_id": "SYN-AC-002",
+      "text": "The updated email is shown after the profile is reopened.",
+      "testable": true,
+      "flags": []
+    }
+  ],
+  "scenarios": [],
+  "note": "",
+  "tests": [
+    {
+      "id": "SYN-TC-001",
+      "title": "Save a verified contact email",
+      "type": "happy",
+      "mapped_ac_ids": ["SYN-AC-001"],
+      "last_result": "Passed",
+      "last_result_at": "2026-10-20T10:00:00Z",
+      "linked_bug_ids": []
+    },
+    {
+      "id": "SYN-TC-002",
+      "title": "Reopen profile and verify saved email",
+      "type": "happy",
+      "mapped_ac_ids": ["SYN-AC-002"],
+      "last_result": "Passed",
+      "last_result_at": "2026-10-20T10:05:00Z",
+      "linked_bug_ids": []
+    },
+    {
+      "id": "SYN-TC-003",
+      "title": "Reject malformed contact email",
+      "type": "negative",
+      "mapped_ac_ids": [],
+      "last_result": "Passed",
+      "last_result_at": "2026-10-20T10:10:00Z",
+      "linked_bug_ids": ["SYN-BUG-001"]
+    }
+  ],
+  "bugs": [
+    {
+      "id": "SYN-BUG-001",
+      "title": "Verification notice appears late after retry",
+      "severity": "2 - High",
+      "priority": "P2",
+      "status": "Active",
+      "age": 5,
+      "found_in": "Staging",
+      "linked_story_id": "SYN-2401",
+      "linked_tc_id": "SYN-TC-003",
+      "assigned_to": "",
+      "application": "Synthetic Accounts",
+      "created": "2026-10-15"
+    }
+  ],
+  "generated_at": "2026-10-21T09:00:00Z"
+}

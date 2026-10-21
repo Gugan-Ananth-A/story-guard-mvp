@@ -15,7 +15,7 @@ from typing import Any
 from reportlab.lib import colors
 from reportlab.lib.units import inch
 from reportlab.pdfgen.canvas import Canvas
-from reportlab.platypus import SimpleDocTemplate
+from reportlab.platypus import PageBreak, SimpleDocTemplate
 
 from story_guard.score import scored_criteria
 
@@ -634,6 +634,69 @@ def render_pdf(
         if missing:
             raise RenderError(
                 "PDF layout does not match the example report: " + ", ".join(missing)
+            )
+        temporary.replace(output_file)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+    return output_file
+
+
+def render_sprint_pdf(
+    entries: list[dict[str, Any]],
+    template_path: str | Path,
+    out_path: str | Path,
+) -> Path:
+    """Render a run-local rollup followed by existing single-story report flowables."""
+    if not isinstance(entries, list) or not entries:
+        raise RenderError("a sprint PDF requires at least one requested score entry")
+    template_file = Path(template_path)
+    try:
+        validate_template(template_file)
+        from story_guard.report_layout import MARGIN_X, PAGE_SIZE, example_flowables, layout_errors
+        from story_guard.sprint_layout import rollup_flowables
+
+        flowables = rollup_flowables(entries)
+        for entry in entries:
+            score = entry.get("score") if isinstance(entry, dict) else None
+            if not isinstance(score, dict):
+                continue
+            narrative = entry.get("narrative")
+            if not isinstance(narrative, dict):
+                narrative = {}
+            record = entry.get("record")
+            if record is not None and not isinstance(record, dict):
+                record = None
+            _rendered_markdown(score, template_file, narrative, record)
+            flowables.extend([PageBreak(), *example_flowables(score, narrative, record)])
+    except (OSError, ValueError, KeyError, TypeError, RenderError) as error:
+        raise RenderError(str(error)) from error
+
+    output_file = Path(out_path)
+    temporary = output_file.with_suffix(output_file.suffix + ".tmp")
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        document = SimpleDocTemplate(
+            str(temporary),
+            pagesize=PAGE_SIZE,
+            leftMargin=MARGIN_X,
+            rightMargin=MARGIN_X,
+            topMargin=0.34 * inch,
+            bottomMargin=0.5 * inch,
+            title="Sprint Rollup",
+        )
+        document.build(flowables, canvasmaker=_NumberedCanvas)
+        if not temporary.is_file() or temporary.stat().st_size == 0:
+            raise RenderError("PDF renderer produced an empty sprint artifact")
+        pdf_bytes = temporary.read_bytes()
+        successful_count = sum(1 for entry in entries if isinstance(entry.get("score"), dict))
+        missing = layout_errors(pdf_bytes) if successful_count else []
+        if not successful_count and b"Sprint Rollup" not in pdf_bytes:
+            missing = ["Sprint Rollup"]
+        if missing:
+            raise RenderError(
+                "Sprint PDF detail layout is missing required report markers: "
+                + ", ".join(missing)
             )
         temporary.replace(output_file)
     except Exception:

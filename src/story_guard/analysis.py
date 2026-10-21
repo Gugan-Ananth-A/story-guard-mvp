@@ -11,6 +11,7 @@ import json
 import re
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 from story_guard.narrative import (
     ATTEMPTS,
@@ -42,36 +43,8 @@ _PRIORITY = re.compile(r"\bP([1-4])\b", re.IGNORECASE)
 _QUALITY_LEVELS = {"good", "needs_improvement", "poor"}
 _COVERAGE_STATUSES = {"adequate", "partial", "none"}
 _TEST_TYPES = {"happy", "negative", "edge", "security", "adhoc"}
-_PROMPT = """You review one acceptance criterion against the test cases in one suite batch. Each request contains one acceptance criterion and one suite batch; the caller repeats this for every suite. The user message is the only source of facts.
-
-Return one JSON object and nothing else. Do not use a Markdown fence. Do not call tools.
-{
-  "ac_id": "the id copied from the acceptance criterion",
-  "mapped_test_ids": ["test ids copied from this suite"],
-  "test_types": {"test id": "scenario type"},
-  "coverage_status": "adequate",
-  "quality": {
-    "status": "good",
-    "testable": true,
-    "issues": ["short issue, or [] when clear"]
-  },
-  "finding": "one sentence on what the named tests check and what is still missing"
-}
-
-How to judge coverage. This call is one acceptance criterion and one suite batch.
-- Read that criterion's text, including the expected result.
-- A test may be listed only when its title checks the same behavior and the same expected result. Sharing a word such as "login" is not enough.
-- The test type field is a hint. An empty type does not block a match; classify a matched test rather than treating the empty field as evidence of a match.
-- For every mapped test whose type is empty, classify it in test_types from its title and steps. Do not change a non-empty source type.
-- Existing source links are intentionally not supplied. Decide the mapping from the criterion and the test evidence in this message.
-- When no test checks this criterion, mapped_test_ids is empty. The finding says that no listed test checks it.
-- coverage_status is your assessment of this batch only. It must be adequate, partial, or none. Use adequate only when the named tests check the behavior and expected result; use partial when they check only part; use none when no test matches.
-- Assess AC quality independently of test coverage. quality.status must be good, needs_improvement, or poor. Use good when the behavior and observable expected result are clear and pass/fail testable. Use needs_improvement for ambiguity or an incomplete expected result. Use poor when the criterion is not meaningfully testable. Keep issues short.
-- Use the ac_id exactly as written. Do not invent a test id. Do not name a test id in the finding unless it is also in mapped_test_ids.
-- Do not use a percent sign.
-- Do not write the phrase "partially covered".
-- Coverage does not change health. Do not set story health in this answer.
-"""
+_PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / "live_map_v1.md"
+_PROMPT = _PROMPT_PATH.read_text(encoding="utf-8")
 
 Progress = Callable[[str], None]
 

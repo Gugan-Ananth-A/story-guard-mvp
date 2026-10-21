@@ -182,13 +182,15 @@ def test_ollama_judges_one_criterion_against_one_suite(monkeypatch):
     assert "Valid login" in user
     assert "Bad password" in user
     assert "122590" not in user
-    assert "How to judge coverage" in system
-    assert "one acceptance criterion and one suite" in system
-    assert 'Sharing a word such as "login" is not enough.' in system
-    assert "no listed test checks" in system
-    assert "Do not use a percent sign" in system
-    assert "partially covered" in system
-    assert "Coverage does not change health" in system
+    assert "Mapping rules:" in system
+    assert "only the supplied test suite batch" in system
+    assert "A shared word between a criterion and a test is not evidence" in system
+    assert "mapped_test_ids" in system
+    assert '"test_types"' in system
+    assert '"coverage_status"' in system
+    assert '"quality"' in system
+    assert '"finding"' in system
+    assert "Depth and gap are derived by the caller" in system
     assert "quality" in system
     assert captured[0]["num_predict"] == 2048
     assert captured[1]["num_predict"] == 2048

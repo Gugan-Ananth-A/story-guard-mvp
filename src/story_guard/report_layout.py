@@ -107,6 +107,11 @@ def example_flowables(
                 else []
             ),
             *(
+                [Paragraph("No tests available.", styles["body"])]
+                if facts["test_count"] == 0
+                else []
+            ),
+            *(
                 [Paragraph(f"Fixture note: {facts['note']}", styles["note"])]
                 if facts["note"]
                 else []
@@ -121,10 +126,20 @@ def example_flowables(
             KeepTogether([
                 Paragraph("4. Bug Details", styles["section"]),
                 Paragraph(
-                    f"{facts['bug_count']} bugs listed, sorted by priority (P1 first) and severity irrespective of user story. "
+                    f"{_display_count(facts['bug_count'])} bugs listed, sorted by priority (P1 first) and severity irrespective of user story. "
                     "Rows shaded grey are not open (Resolved / Closed / Rejected). "
                     "Bold environment = escaped defect (Production / UAT).",
                     styles["intro"],
+                ),
+                *(
+                    [Paragraph("No open bugs", styles["body"])]
+                    if facts["open_bug_count"] == 0
+                    else []
+                ),
+                *(
+                    [Paragraph("Open bug count unavailable.", styles["body"])]
+                    if facts["open_bug_count"] is None
+                    else []
                 ),
                 Spacer(1, 3),
                 _bug_table(facts, styles),
@@ -199,8 +214,12 @@ def _facts(score: dict[str, Any], record: dict | None) -> dict[str, Any]:
         story = score.get("story") or {}
         coverage = score.get("coverage") or {}
         bugs_obj = score.get("bugs") or {}
-        items = bugs_obj.get("items", []) if isinstance(bugs_obj, dict) else []
-        criteria = score.get("acceptance_criteria") or []
+        raw_items = bugs_obj.get("items") if isinstance(bugs_obj, dict) else None
+        bugs_available = isinstance(raw_items, list)
+        items = [bug for bug in raw_items if isinstance(bug, dict)] if bugs_available else []
+        raw_criteria = score.get("acceptance_criteria")
+        criteria_available = isinstance(raw_criteria, list)
+        criteria = raw_criteria if criteria_available else []
         mappings = {
             row.get("ac_id"): list(row.get("test_ids") or [])
             for row in score.get("test_mappings") or []
@@ -220,36 +239,55 @@ def _facts(score: dict[str, Any], record: dict | None) -> dict[str, Any]:
                     "row_status": "none" if not links else "partial",
                 }
             )
-        open_bugs = bugs_obj.get("open_count", 0) if isinstance(bugs_obj, dict) else 0
+        open_bugs = _int_or_none(bugs_obj.get("open_count")) if isinstance(bugs_obj, dict) else None
+        if open_bugs is None and bugs_available:
+            open_bugs = sum(1 for bug in items if not is_closed_status(bug.get("status")))
+        test_count = _int_or_none(coverage.get("total_tests"))
+        mapped_count = _int_or_none(coverage.get("mapped_ac_count"))
+        bug_count = _int_or_none(bugs_obj.get("total_count")) if isinstance(bugs_obj, dict) else None
+        if bug_count is None and bugs_available:
+            bug_count = len(items)
+        priorities = _priorities(items) if bugs_available else None
+        reopened = _status_count(items, "reopened") if bugs_available else None
+        unable = _unable_count(items) if bugs_available else None
+        health = str(score.get("health") or "Unavailable")
+        title = str(story.get("title") or "").strip()
+        story_id = str(story.get("id") or "").strip()
         return {
-            "story_id": str(story.get("id", "")),
-            "title": str(story.get("title", "")),
+            "story_id": story_id,
+            "title": title or (f"Story {story_id}" if story_id else "Untitled story"),
             "project": str(score.get("source") or "Not provided"),
             "generated_on": _display_date(str(score.get("generated_at") or "")),
             "scenario_count": len(scenarios),
+            "criteria_available": criteria_available,
             "scenarios": scenarios,
-            "test_count": int(coverage.get("total_tests") or 0),
-            "mapped_count": int(coverage.get("mapped_ac_count") or 0),
-            "bug_count": len(items),
-            "open_bug_count": int(open_bugs or 0),
+            "test_count": test_count,
+            "mapped_count": mapped_count,
+            "bug_count": bug_count,
+            "bugs_available": bugs_available,
+            "open_bug_count": open_bugs,
             "bugs": items,
-            "open_bugs_by_priority": _priorities(items),
-            "reopened": _status_count(items, "reopened"),
-            "unable": _unable_count(items),
+            "open_bugs_by_priority": priorities,
+            "reopened": reopened,
+            "unable": unable,
             "adequate_count": 0,
             "partial_count": sum(1 for row in scenarios if row["row_status"] == "partial"),
             "none_count": sum(1 for row in scenarios if row["row_status"] == "none"),
-            "health": str(score.get("health") or "Unavailable"),
+            "health": health,
             "health_band": str(score.get("health_band") or ""),
-            "coverage_label": _coverage_label(scenarios, len(scenarios)),
+            "coverage_label": _coverage_label(scenarios, len(scenarios)) if test_count is not None else "Unavailable",
             "ac_field": "",
             "note": "",
-            "at_risk": 0,
-            "healthy": 0,
+            "at_risk": _portfolio_flags(health, str(score.get("health_band") or ""))[0],
+            "healthy": _portfolio_flags(health, str(score.get("health_band") or ""))[1],
         }
 
-    bugs = [bug for bug in score.get("bugs") or [] if isinstance(bug, dict)]
-    scenarios = [row for row in score.get("scenarios") or [] if isinstance(row, dict)]
+    raw_bugs = score.get("bugs")
+    bugs_available = isinstance(raw_bugs, list)
+    bugs = [bug for bug in raw_bugs if isinstance(bug, dict)] if bugs_available else []
+    raw_scenarios = score.get("scenarios")
+    criteria_available = isinstance(raw_scenarios, list)
+    scenarios = [row for row in raw_scenarios if isinstance(row, dict)] if criteria_available else []
     health = str(score.get("health") or "Unavailable")
     band = str(score.get("health_band") or "")
     at_risk, healthy = _portfolio_flags(health, band)
@@ -259,28 +297,47 @@ def _facts(score: dict[str, Any], record: dict | None) -> dict[str, Any]:
     generated = score.get("generated_at")
     if not isinstance(generated, str) or not generated.strip():
         generated = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
+    story_id = str(score.get("story_id") or "").strip()
+    title = str(score.get("title") or "").strip()
+    scenario_count = _int_or_none(score.get("scenario_count"))
+    if scenario_count is None and criteria_available:
+        scenario_count = len(scenarios)
+    test_count = _int_or_none(score.get("test_count"))
+    if test_count is None and isinstance(record, dict) and isinstance(record.get("tests"), list):
+        test_count = len(record["tests"])
+    bug_count = _int_or_none(score.get("bug_count"))
+    if bug_count is None and bugs_available:
+        bug_count = len(bugs)
+    open_bug_count = _int_or_none(score.get("open_bug_count"))
+    if open_bug_count is None and bugs_available:
+        open_bug_count = sum(1 for bug in bugs if not is_closed_status(bug.get("status")))
+    priorities = score.get("open_bugs_by_priority")
+    if not isinstance(priorities, dict):
+        priorities = _priorities(bugs) if bugs_available else None
     return {
-        "story_id": str(score.get("story_id") or ""),
-        "title": str(score.get("title") or ""),
+        "story_id": story_id,
+        "title": title or (f"Story {story_id}" if story_id else "Untitled story"),
         "project": project or "Not provided",
         "generated_on": _display_date(generated),
-        "scenario_count": int(score.get("scenario_count") or len(scenarios)),
+        "scenario_count": scenario_count,
+        "criteria_available": criteria_available,
         "scenarios": scenarios,
-        "test_count": int(score.get("test_count") or 0),
-        "mapped_count": int(score.get("mapped_count") or 0),
-        "bug_count": int(score.get("bug_count") if isinstance(score.get("bug_count"), int) else len(bugs)),
-        "open_bug_count": int(score.get("open_bug_count") or 0),
+        "test_count": test_count,
+        "mapped_count": _int_or_none(score.get("mapped_count")),
+        "bug_count": bug_count,
+        "bugs_available": bugs_available,
+        "open_bug_count": open_bug_count,
         "bugs": bugs,
-        "open_bugs_by_priority": score.get("open_bugs_by_priority") or _priorities(bugs),
-        "reopened": _status_count(bugs, "reopened"),
-        "unable": _unable_count(bugs),
+        "open_bugs_by_priority": priorities,
+        "reopened": _status_count(bugs, "reopened") if bugs_available else None,
+        "unable": _unable_count(bugs) if bugs_available else None,
         "adequate_count": int(score.get("adequate_count") or 0),
         "partial_count": int(score.get("partial_count") or 0),
         "none_count": int(score.get("none_count") or 0),
         "health": health,
         "health_band": band,
         "coverage_label": _coverage_label(
-            scenarios, int(score.get("scenario_count") or len(scenarios))
+            scenarios, scenario_count
         ),
         "ac_field": str(score.get("ac_field") or ""),
         "note": str(score.get("note") or "").strip(),
@@ -317,9 +374,9 @@ def _kpi_row(facts: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
         (str(facts["at_risk"]), "Stories At Risk", RED),
         (str(facts["healthy"]), "Stories Healthy", GREEN),
         (facts["coverage_label"], "Avg Test Case Coverage", BLUE),
-        (str(facts["open_bug_count"]), "Total Open Bugs", ORANGE),
-        (str(facts["reopened"]), "Reopened Bugs", RED),
-        (str(facts["unable"]), "Rejected / Unable to Reproduce", RED),
+        (_display_count(facts["open_bug_count"]), "Total Open Bugs", ORANGE),
+        (_display_count(facts["reopened"]), "Reopened Bugs", RED),
+        (_display_count(facts["unable"]), "Rejected / Unable to Reproduce", RED),
     ]
     width = CONTENT_WIDTH / len(tiles)
     values = []
@@ -352,19 +409,21 @@ def _kpi_row(facts: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
 def _summary_block(
     facts: dict[str, Any], narrative: dict | None, styles: dict[str, ParagraphStyle]
 ) -> Table:
-    priorities = facts["open_bugs_by_priority"] if isinstance(facts["open_bugs_by_priority"], dict) else {}
+    priorities = facts["open_bugs_by_priority"]
+    def priority_value(key: str) -> int | str:
+        return _count(priorities.get(key)) if isinstance(priorities, dict) else "Unavailable"
     rows = [
         (_p("Metric", styles["th"]), _p("Value", styles["th"])),
         (_p("User Stories Assessed"), _p("1")),
         (_p("Healthy (User Stories count based on bugs Priority)"), _p(facts["healthy"])),
         (_p("At Risk (User Stories count based on bugs Priority)"), _p(facts["at_risk"])),
         (_p("Avg Test Case Coverage %"), _p(facts["coverage_label"])),
-        (_p("Open Critical Bugs - P1"), _p(_count(priorities.get("P1")))),
-        (_p("Open High Bugs - P2"), _p(_count(priorities.get("P2")))),
-        (_p("Open Medium Bugs - P3"), _p(_count(priorities.get("P3")))),
-        (_p("Open Low Bugs - P4"), _p(_count(priorities.get("P4")))),
-        (_p("Reopened Bugs"), _p(facts["reopened"])),
-        (_p("Rejected / Unable to Reproduce"), _p(facts["unable"])),
+        (_p("Open Critical Bugs - P1"), _p(priority_value("P1"))),
+        (_p("Open High Bugs - P2"), _p(priority_value("P2"))),
+        (_p("Open Medium Bugs - P3"), _p(priority_value("P3"))),
+        (_p("Open Low Bugs - P4"), _p(priority_value("P4"))),
+        (_p("Reopened Bugs"), _p(_display_count(facts["reopened"]))),
+        (_p("Rejected / Unable to Reproduce"), _p(_display_count(facts["unable"]))),
     ]
     left = Table(rows, colWidths=[268, 78])
     left_style: list[tuple] = [
@@ -462,14 +521,14 @@ def _overview_table(facts: dict[str, Any], styles: dict[str, ParagraphStyle]) ->
     data_row = [
         facts["story_id"],
         facts["title"],
-        str(facts["test_count"]),
-        str(facts["bug_count"]),
-        str(_count(priorities.get("P1"))),
-        str(_count(priorities.get("P2"))),
-        str(_count(priorities.get("P3"))),
-        str(_count(priorities.get("P4"))),
-        str(facts["reopened"]),
-        str(facts["unable"]),
+        _display_count(facts["test_count"]),
+        _display_count(facts["bug_count"]),
+        str(_count(priorities.get("P1"))) if isinstance(priorities, dict) else "Unavailable",
+        str(_count(priorities.get("P2"))) if isinstance(priorities, dict) else "Unavailable",
+        str(_count(priorities.get("P3"))) if isinstance(priorities, dict) else "Unavailable",
+        str(_count(priorities.get("P4"))) if isinstance(priorities, dict) else "Unavailable",
+        _display_count(facts["reopened"]),
+        _display_count(facts["unable"]),
         facts["coverage_label"],
         facts["health"],
     ]
@@ -518,6 +577,13 @@ def _coverage_table(facts: dict[str, Any], styles: dict[str, ParagraphStyle]) ->
         _p("Coverage Gap (AI)", styles["th"]),
     ]]
     paints: list[tuple[int, colors.Color]] = []
+    if not facts["scenarios"]:
+        empty_text = (
+            "No acceptance criteria provided."
+            if facts["criteria_available"] and facts["scenario_count"] == 0
+            else "Acceptance criteria unavailable."
+        )
+        rows.append([_p(empty_text, styles["td"]), "", ""])
     for scenario in facts["scenarios"]:
         depth, gap, status = _depth_and_gap(scenario)
         rows.append([
@@ -536,6 +602,8 @@ def _coverage_table(facts: dict[str, Any], styles: dict[str, ParagraphStyle]) ->
         ("TOPPADDING", (0, 0), (-1, -1), 3),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
     ]
+    if not facts["scenarios"]:
+        commands.append(("SPAN", (0, 1), (-1, 1)))
     for index, color in paints:
         commands.append(("BACKGROUND", (1, index), (2, index), color))
     table.setStyle(TableStyle(commands))
@@ -551,7 +619,9 @@ def _bug_table(facts: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Tabl
     bugs = sorted(facts["bugs"], key=_bug_rank)
     chip_rows: list[tuple[int, colors.Color, colors.Color]] = []
     closed_rows: list[int] = []
-    if not bugs:
+    if not facts["bugs_available"] and facts["bug_count"] != 0:
+        rows.append([_p("Bug information unavailable.", styles["td"])] + [_p("", styles["td"]) for _ in headers[1:]])
+    elif not bugs:
         rows.append([_p("No bugs.", styles["td"])] + [_p("", styles["td"]) for _ in headers[1:]])
     for bug in bugs:
         priority = _priority_label(bug)
@@ -588,7 +658,7 @@ def _bug_table(facts: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Tabl
         ("TOPPADDING", (0, 0), (-1, -1), 2),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
     ]
-    if not bugs:
+    if (not facts["bugs_available"] and facts["bug_count"] != 0) or not bugs:
         commands.append(("SPAN", (0, 1), (-1, 1)))
     for index in closed_rows:
         commands.append(("BACKGROUND", (0, index), (-1, index), CLOSED_BG))
@@ -600,12 +670,15 @@ def _bug_table(facts: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Tabl
 
 def _count_line(facts: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Paragraph:
     return Paragraph(
-        f"{facts['scenario_count']} acceptance criteria | "
+        f"{_display_count(facts['scenario_count'])} acceptance criteria | "
         f'<font color="#1f8a4c">{facts["adequate_count"]} adequately covered</font> | '
         f'<font color="#c8891e">{facts["partial_count"]} with gaps</font> | '
         f'<font color="#d64545">{facts["none_count"]} not covered</font>',
         styles["body"],
     )
+def _display_count(value: object) -> str:
+    count = _int_or_none(value)
+    return str(count) if count is not None else "Unavailable"
 
 
 def _gap_key(styles: dict[str, ParagraphStyle]) -> Table:
@@ -650,11 +723,12 @@ def _observations(narrative: dict | None, facts: dict[str, Any]) -> list[str]:
     if not lines:
         lines = [
             (
-                f"{facts['scenario_count']} acceptance criteria, {facts['adequate_count']} adequately covered, "
+                f"{_display_count(facts['scenario_count'])} acceptance criteria, "
+                f"{facts['adequate_count']} adequately covered, "
                 f"{facts['partial_count']} with gaps, {facts['none_count']} not covered."
             ),
-            f"{facts['test_count']} tests and {facts['mapped_count']} mapped.",
-            f"{facts['bug_count']} bugs, with {facts['open_bug_count']} open.",
+            f"{_display_count(facts['test_count'])} tests and {_display_count(facts['mapped_count'])} mapped.",
+            f"{_display_count(facts['bug_count'])} bugs, with {_display_count(facts['open_bug_count'])} open.",
         ]
     kept = []
     for line in lines:
@@ -859,9 +933,15 @@ _BUCKET_LINES = (
 
 def _coverage_label(scenarios: list, scenario_count: int) -> str:
     """Average of Positive, Negative, and Adhoc coverage. Each bucket is one third of a criterion."""
+    percentage, _classification = coverage_summary(scenarios, scenario_count)
+    return percentage
+
+
+def coverage_summary(scenarios: list, scenario_count: int) -> tuple[str, str]:
+    """Return the rounded bucket coverage percent and its score-derived classification."""
     total = scenario_count if isinstance(scenario_count, int) and scenario_count > 0 else 0
     if total <= 0:
-        return "n/a"
+        return "n/a", "none"
     points = 0
     for row in scenarios:
         if not isinstance(row, dict):
@@ -873,7 +953,20 @@ def _coverage_label(scenarios: list, scenario_count: int) -> str:
         depth = str(row.get("depth") or "")
         points += sum(1 for line in _BUCKET_LINES if line in depth)
     denom = total * 3
-    return f"{(points * 100 + denom // 2) // denom}%"
+    percentage = f"{(points * 100 + denom // 2) // denom}%"
+    if points == 0:
+        classification = "none"
+    elif points >= denom:
+        classification = "adequate"
+    else:
+        classification = "partial"
+    return percentage, classification
+
+
+def _int_or_none(value: object) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return None
 
 
 def _display_date(value: str) -> str:
