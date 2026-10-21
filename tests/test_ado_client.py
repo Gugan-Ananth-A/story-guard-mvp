@@ -14,6 +14,7 @@ from story_guard.ado_client import (
     NonStoryWorkItemError,
     StoryRecord,
     WorkItemNotFoundError,
+    map_ado_bug,
     map_ado_work_item,
 )
 
@@ -415,6 +416,115 @@ class ADOClientTests(unittest.TestCase):
         self.assertIn(f"[System.IterationPath] = '{path}'", query)
         self.assertNotIn("/workitems/", request.full_url.lower())
         self.assertEqual(captured["timeout"], 15.0)
+
+    def test_case_text_keeps_description_parameters_and_shared_steps(self) -> None:
+        story = {
+            "id": 121213,
+            "fields": {
+                "System.Title": "Login Screen",
+                "System.WorkItemType": "User Story",
+                "System.State": "New",
+                "System.Description": "",
+                "Microsoft.VSTS.Common.AcceptanceCriteria": "",
+            },
+            "relations": [
+                {
+                    "rel": "System.LinkTypes.Hierarchy-Forward",
+                    "url": "https://dev.azure.com/example/_apis/wit/workItems/121214",
+                }
+            ],
+        }
+        plan = {
+            "id": 121214,
+            "fields": {
+                "System.Title": "Story Guard - AI Agent",
+                "System.WorkItemType": "Test Plan",
+                "System.State": "Active",
+            },
+            "relations": [],
+        }
+        suites = {
+            "value": [
+                {
+                    "id": 121215,
+                    "name": "Story Guard - AI Agent",
+                    "suiteType": "staticTestSuite",
+                }
+            ]
+        }
+        cases = {"value": [{"workItem": {"id": 121216, "name": "Valid login"}}]}
+        login_case = {
+            "id": 121216,
+            "fields": {
+                "System.Title": "Valid login",
+                "System.WorkItemType": "Test Case",
+                "System.Description": "<div>Admin <b>login</b></div>",
+                "Microsoft.VSTS.TCM.Steps": (
+                    "<steps><step>"
+                    "<parameterizedString>Enter email</parameterizedString>"
+                    "<parameterizedString>Email is accepted</parameterizedString>"
+                    "</step><compref id=\"2\" ref=\"555\"></compref></steps>"
+                ),
+                "Microsoft.VSTS.TCM.LocalDataSource": (
+                    "<NewDataSet><Table1><email>admin@example.com</email></Table1></NewDataSet>"
+                ),
+            },
+            "relations": [],
+        }
+        shared = {
+            "id": 555,
+            "fields": {
+                "System.Title": "Open login",
+                "System.WorkItemType": "Shared Steps",
+                "System.Description": "Shared setup",
+                "Microsoft.VSTS.TCM.Steps": "<steps><step>Open the login page</step></steps>",
+            },
+            "relations": [],
+        }
+
+        def opener(request, timeout):
+            url = request.full_url
+            if "/workitems/555" in url:
+                body = shared
+            elif "/workitems/121216" in url:
+                body = login_case
+            elif "/workitems/121214" in url:
+                body = plan
+            elif "/testcase?" in url:
+                body = cases
+            elif "/suites?" in url:
+                body = suites
+            else:
+                body = story
+            return BytesIO(json.dumps(body).encode("utf-8"))
+
+        loaded = self.make_client(opener).load_live_story(121213)
+        case = loaded["tests"][0]
+
+        self.assertIn("Enter email", case["steps"])
+        self.assertIn("Email is accepted", case["steps"])
+        self.assertIn("Open the login page", case["steps"])
+        self.assertIn("Admin login", case["description"])
+        self.assertIn("Shared setup", case["description"])
+        self.assertIn("admin@example.com", case["parameters"])
+
+    def test_bug_keeps_description_and_repro_steps(self) -> None:
+        bug = map_ado_bug(
+            {
+                "id": 122590,
+                "fields": {
+                    "System.Title": "Password field rejects characters",
+                    "System.WorkItemType": "Bug",
+                    "System.State": "New",
+                    "System.Description": "<div>The field rejects the typed character.</div>",
+                    "Microsoft.VSTS.TCM.ReproSteps": "<div>Type a special character.</div>",
+                },
+            },
+            "123086",
+        )
+
+        self.assertEqual(bug["description"], "The field rejects the typed character.")
+        self.assertEqual(bug["repro_steps"], "Type a special character.")
 
     def test_sprint_query_escapes_a_quote_in_the_iteration_path(self) -> None:
         captured = {}

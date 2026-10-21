@@ -136,13 +136,23 @@ def _relation_work_item_id(relation: object) -> Optional[int]:
 
 
 def _plain_steps(value: object) -> str:
-    """Turn an Azure DevOps steps field into one line of text."""
+    """Turn an Azure DevOps HTML or XML field into one line of text."""
     if not isinstance(value, str):
         return ""
     text = unescape(value)
     text = re.sub(r"(?i)<br\s*/?>", " ", text)
     text = re.sub(r"<[^>]+>", " ", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+def _shared_step_ids(value: str) -> List[int]:
+    """Work item ids referenced by shared-step tags. The order is the document order."""
+    found: List[int] = []
+    for token in re.findall(r'(?i)<compref\b[^>]*\bref="(\d+)"', value):
+        number = int(token)
+        if number not in found:
+            found.append(number)
+    return found
 
 
 def _test_case_from_plan_row(
@@ -248,6 +258,8 @@ def map_ado_bug(payload: Dict[str, Any], story_id: str) -> Optional[Dict[str, An
         "status": state if isinstance(state, str) else "",
         "age": _age_days(created),
         "found_in": _text(fields.get("Custom.Environment")),
+        "description": _plain_steps(fields.get("System.Description")),
+        "repro_steps": _plain_steps(fields.get("Microsoft.VSTS.TCM.ReproSteps")),
         "linked_story_id": story_id,
         "linked_tc_id": "",
         "assigned_to": _person_name(fields.get("System.AssignedTo")),
@@ -518,22 +530,62 @@ class ADOClient:
         return suites
 
     def _attach_case_steps(self, cases: List[Dict[str, Any]]) -> None:
-        """Copy plain test steps onto each case. A missing case leaves the steps blank."""
+        """Copy the full case text onto each case. A missing case leaves the text blank.
+
+        Title stays on the plan row. This adds the description, the steps, the
+        parameters, and the text of any shared step the case points at.
+        """
         for case in cases:
             if not isinstance(case, dict):
                 continue
             case_id = str(case.get("id") or "")
             if not case_id.isdigit():
                 case["steps"] = ""
+                case["description"] = ""
+                case["parameters"] = ""
                 continue
             try:
                 item = self.get_work_item(int(case_id))
             except WorkItemNotFoundError:
                 case["steps"] = ""
+                case["description"] = ""
+                case["parameters"] = ""
                 continue
-            fields = item.get("fields") if isinstance(item, dict) else None
-            raw = fields.get("Microsoft.VSTS.TCM.Steps") if isinstance(fields, dict) else ""
-            case["steps"] = _plain_steps(raw)
+            steps, description, parameters = self._case_text(item, {int(case_id)})
+            case["steps"] = steps
+            case["description"] = description
+            case["parameters"] = parameters
+
+    def _case_text(self, item: Dict[str, Any], seen: set[int]) -> tuple[str, str, str]:
+        """Return steps, description, and parameters, with shared steps expanded."""
+        fields = item.get("fields") if isinstance(item, dict) else None
+        if not isinstance(fields, dict):
+            fields = {}
+        raw_steps = fields.get("Microsoft.VSTS.TCM.Steps")
+        if not isinstance(raw_steps, str):
+            raw_steps = ""
+        steps = _plain_steps(raw_steps)
+        description = _plain_steps(fields.get("System.Description"))
+        parameters = _plain_steps(fields.get("Microsoft.VSTS.TCM.LocalDataSource"))
+        named = _plain_steps(fields.get("Microsoft.VSTS.TCM.Parameters"))
+        if named:
+            parameters = f"{parameters} {named}".strip()
+        for shared_id in _shared_step_ids(raw_steps):
+            if shared_id in seen:
+                continue
+            seen.add(shared_id)
+            try:
+                shared = self.get_work_item(shared_id)
+            except WorkItemNotFoundError:
+                continue
+            shared_steps, shared_description, shared_parameters = self._case_text(shared, seen)
+            if shared_steps:
+                steps = f"{steps} {shared_steps}".strip()
+            if shared_description:
+                description = f"{description} {shared_description}".strip()
+            if shared_parameters:
+                parameters = f"{parameters} {shared_parameters}".strip()
+        return steps, description, parameters
 
     def _cases_in_plan(self, plan_id: int, suite_id: Optional[int] = None) -> List[Dict[str, Any]]:
         suites = self._plan_suites(plan_id)

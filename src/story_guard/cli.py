@@ -4,9 +4,9 @@ import argparse
 import json
 import sys
 
-from story_guard.envfile import load_env_file
+from story_guard.envfile import FILE_OWNS, load_env_file
 from story_guard.graph import ContractError, GateError, run, run_generate
-from story_guard.narrative import NarrativeError, keep_only_model
+from story_guard.narrative import NarrativeError, configured_llm, keep_only_model
 from story_guard.render import RenderError
 from story_guard.trace import record_batch, record_success
 
@@ -22,7 +22,12 @@ _USAGE = (
 
 
 def main(argv: list[str] | None = None) -> int:
-    load_env_file()
+    for key, previous, value in load_env_file(file_owns=FILE_OWNS):
+        print(
+            f"[story-guard] {key}={value} from .env (shell had {previous})",
+            file=sys.stderr,
+            flush=True,
+        )
     args = list(sys.argv[1:] if argv is None else argv)
     if not args:
         print(_USAGE)
@@ -97,6 +102,16 @@ def _generate(
         return 1
     # Unload every other resident model before the first Ollama call.
     keep_only_model()
+    try:
+        provider, model = configured_llm()
+    except NarrativeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(
+        f"[story-guard] provider {provider}, model {model}",
+        file=sys.stderr,
+        flush=True,
+    )
     written: list[str] = []
     failed = False
     # A plan id is rejected above unless this batch is exactly one story.

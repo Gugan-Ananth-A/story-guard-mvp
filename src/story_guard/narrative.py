@@ -21,8 +21,10 @@ DEFAULT_MODEL = "qwen3.5:4b"
 DEFAULT_HOST = "http://127.0.0.1:11434"
 DEFAULT_GROK_MODEL = "grok-4.7"
 GROK_CHAT_URL = "https://api.x.ai/v1/chat/completions"
-DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
+DEFAULT_DEEPSEEK_MODEL = "deepseek-flash"
 DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+DEFAULT_OPENAI_MODEL = "gpt-5.6-luna"
+DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 _NS = 1_000_000_000
 _OWNERS = {"qa", "dev", "po"}
 
@@ -122,8 +124,13 @@ def _payload(score: dict, correction: str | None = None) -> dict:
                 ),
             }
         )
-    if _llm_provider() == "deepseek":
+    provider = _llm_provider()
+    if provider == "deepseek":
         payload = _deepseek_payload(messages, MAX_TOKENS)
+    elif provider == "openai":
+        payload = _openai_payload(messages, MAX_TOKENS)
+    elif provider == "grok":
+        payload = _grok_payload(messages, MAX_TOKENS)
     else:
         payload = {
             "model": _model(),
@@ -154,6 +161,8 @@ def ollama_chat(messages: list[dict], num_predict: int = MAX_TOKENS) -> dict:
         num_predict = MAX_TOKENS
     if _llm_provider() == "deepseek":
         return _deepseek_chat(messages, num_predict)
+    if _llm_provider() == "openai":
+        return _openai_chat(messages, num_predict)
     if _llm_provider() == "grok":
         return _grok_chat(messages, num_predict)
     payload = {
@@ -174,18 +183,42 @@ def ollama_chat(messages: list[dict], num_predict: int = MAX_TOKENS) -> dict:
     return _post(payload)
 
 
-def _model() -> str:
-    raw = os.environ.get("OLLAMA_MODEL")
-    if raw is None or raw.strip() == "":
-        return DEFAULT_MODEL
+def _override_model() -> str:
+    """STORY_GUARD_MODEL wins over the provider-specific model variable."""
+    raw = os.environ.get("STORY_GUARD_MODEL")
+    if raw is None:
+        return ""
     return raw.strip()
+
+
+def _named_model(env_name: str, default: str) -> str:
+    override = _override_model()
+    if override:
+        return override
+    raw = os.environ.get(env_name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip()
+
+
+def _model() -> str:
+    return _named_model("OLLAMA_MODEL", DEFAULT_MODEL)
 
 
 def _deepseek_model() -> str:
-    raw = os.environ.get("DEEPSEEK_MODEL")
-    if raw is None or raw.strip() == "":
-        return DEFAULT_DEEPSEEK_MODEL
-    return raw.strip()
+    return _named_model("DEEPSEEK_MODEL", DEFAULT_DEEPSEEK_MODEL)
+
+
+def configured_llm() -> tuple[str, str]:
+    """Provider and model id selected from the environment."""
+    provider = _llm_provider()
+    if provider == "deepseek":
+        return provider, _deepseek_model()
+    if provider == "openai":
+        return provider, _openai_model()
+    if provider == "grok":
+        return provider, _grok_model()
+    return provider, _model()
 
 
 def _deepseek_base_url() -> str:
@@ -210,11 +243,13 @@ def _host() -> str:
 
 
 def _llm_provider() -> str:
-    """Select Ollama, DeepSeek, or Grok from the configured provider."""
+    """Select Ollama, OpenAI, DeepSeek, or Grok from the configured provider."""
     raw = os.environ.get("STORY_GUARD_LLM")
     provider = raw.strip().casefold() if raw is not None else ""
     if provider in {"grok", "xai"}:
         return "grok"
+    if provider in {"openai", "chatgpt", "chat-gpt", "chat_gpt", "gpt"}:
+        return "openai"
     if provider in {"deepseek", "deepseek-api", "deepseek_api"}:
         return "deepseek"
     if provider in {"", "ollama", "local"}:
@@ -223,6 +258,8 @@ def _llm_provider() -> str:
 
 
 def _deepseek_payload(messages: list[dict], num_predict: int) -> dict:
+    # Thinking is on by default and spends the token budget on a plan.
+    # These calls need the JSON object in content, so thinking stays off.
     return {
         "model": _deepseek_model(),
         "messages": messages,
@@ -230,57 +267,105 @@ def _deepseek_payload(messages: list[dict], num_predict: int) -> dict:
         "temperature": TEMPERATURE,
         "max_tokens": num_predict,
         "response_format": {"type": "json_object"},
+        "thinking": {"type": "disabled"},
     }
 
 
 def _deepseek_chat(messages: list[dict], num_predict: int) -> dict:
-    key = _deepseek_key()
-    body = _deepseek_post(_deepseek_payload(messages, num_predict), key)
-    return _deepseek_response(body)
+    return _timed_deepseek(_deepseek_payload(messages, num_predict))
+
+
+def _timed_deepseek(payload: dict) -> dict:
+    started = time.perf_counter()
+    body = _deepseek_post(payload, _deepseek_key())
+    elapsed_ns = int((time.perf_counter() - started) * _NS)
+    return _stamp_duration(_deepseek_response(body), elapsed_ns)
+
+
+def _stamp_duration(response: dict, elapsed_ns: int) -> dict:
+    """Give a hosted reply the same generation clock the local cap already reads."""
+    response["total_duration"] = elapsed_ns
+    response["load_duration"] = 0
+    response["eval_duration"] = elapsed_ns
+    response["prompt_eval_duration"] = 0
+    return response
 
 
 def _deepseek_response(body: dict) -> dict:
+    return _chat_choice(body, "deepseek")
+
+
+_REASONING_PARTS = {"reasoning", "reasoning_text"}
+
+
+def _assistant_text(content: object) -> str:
+    """Visible answer text. Reasoning parts are not the JSON object."""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for item in content:
+        if isinstance(item, str):
+            parts.append(item)
+            continue
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("type") or "") in _REASONING_PARTS:
+            continue
+        text = item.get("text")
+        if isinstance(text, str):
+            parts.append(text)
+    return "".join(parts)
+
+
+def _completion_counts(usage: dict) -> tuple[int, int]:
+    """Visible completion tokens, then reasoning tokens."""
+    completion = _usage_count(usage.get("completion_tokens"))
+    details = usage.get("completion_tokens_details")
+    reasoning = 0
+    if isinstance(details, dict):
+        reasoning = _usage_count(details.get("reasoning_tokens"))
+    if reasoning > completion:
+        reasoning = completion
+    return completion - reasoning, reasoning
+
+
+def _chat_choice(body: dict, label: str) -> dict:
     choices = body.get("choices")
     if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
-        raise NarrativeError("deepseek response has no choice")
+        raise NarrativeError(f"{label} response has no choice")
     message = choices[0].get("message")
     if not isinstance(message, dict):
-        raise NarrativeError("deepseek response has no message")
-    content = message.get("content")
-    if isinstance(content, list):
-        content = "".join(
-            item if isinstance(item, str) else str(item.get("text", ""))
-            for item in content
-            if isinstance(item, (str, dict))
-        )
-    if not isinstance(content, str):
-        content = ""
-    normalized_message = {"role": "assistant", "content": content}
-    reasoning = message.get("reasoning_content")
-    if isinstance(reasoning, str) and reasoning.strip():
-        normalized_message["thinking"] = reasoning
+        raise NarrativeError(f"{label} response has no message")
+    content = _assistant_text(message.get("content"))
     usage = body.get("usage") if isinstance(body.get("usage"), dict) else {}
+    visible, reasoning_tokens = _completion_counts(usage)
+    finish = choices[0].get("finish_reason") or "stop"
+    if label == "openai" and finish == "length" and content.strip() == "":
+        raise NarrativeError("openai stopped before the JSON object", retry_hint=True)
     return {
-        "message": normalized_message,
+        "message": {"role": "assistant", "content": content},
         "prompt_eval_count": _usage_count(usage.get("prompt_tokens")),
-        "eval_count": _usage_count(usage.get("completion_tokens")),
-        "done_reason": choices[0].get("finish_reason", "stop"),
+        "eval_count": visible,
+        "reasoning_tokens": reasoning_tokens,
+        "done_reason": finish,
     }
 
 
 def _grok_model() -> str:
-    raw = os.environ.get("XAI_MODEL")
+    return _named_model("XAI_MODEL", DEFAULT_GROK_MODEL)
+
+
+def _grok_key() -> str:
+    raw = os.environ.get("XAI_API_KEY")
     if raw is None or raw.strip() == "":
-        return DEFAULT_GROK_MODEL
+        raise NarrativeError("XAI_API_KEY is not set")
     return raw.strip()
 
 
-def _grok_chat(messages: list[dict], num_predict: int) -> dict:
-    """One xAI chat completion, shaped like an Ollama /api/chat response."""
-    key = os.environ.get("XAI_API_KEY")
-    if key is None or key.strip() == "":
-        raise NarrativeError("XAI_API_KEY is not set")
-    payload = {
+def _grok_payload(messages: list[dict], num_predict: int) -> dict:
+    return {
         "model": _grok_model(),
         "temperature": TEMPERATURE,
         "max_tokens": num_predict,
@@ -288,21 +373,29 @@ def _grok_chat(messages: list[dict], num_predict: int) -> dict:
         "messages": messages,
         "store": False,
     }
+
+
+def _grok_chat(messages: list[dict], num_predict: int) -> dict:
+    """One xAI chat completion, shaped like an Ollama /api/chat response."""
+    payload = _grok_payload(messages, num_predict)
     if "tools" in payload or any("tools" in message for message in payload["messages"]):
         raise NarrativeError("narrative request must not include tools")
+    return _timed_grok(payload)
+
+
+def _timed_grok(payload: dict) -> dict:
     started = time.perf_counter()
-    body = _grok_post(payload, key.strip())
+    body = _grok_post(payload, _grok_key())
     elapsed_ns = int((time.perf_counter() - started) * _NS)
     usage = body.get("usage") if isinstance(body.get("usage"), dict) else {}
-    return {
-        "message": {"role": "assistant", "content": _grok_content(body)},
-        "prompt_eval_count": _usage_count(usage.get("prompt_tokens")),
-        "eval_count": _usage_count(usage.get("completion_tokens")),
-        "total_duration": elapsed_ns,
-        "load_duration": 0,
-        "eval_duration": elapsed_ns,
-        "prompt_eval_duration": 0,
-    }
+    return _stamp_duration(
+        {
+            "message": {"role": "assistant", "content": _grok_content(body)},
+            "prompt_eval_count": _usage_count(usage.get("prompt_tokens")),
+            "eval_count": _usage_count(usage.get("completion_tokens")),
+        },
+        elapsed_ns,
+    )
 
 
 def _usage_count(value: object) -> int:
@@ -357,10 +450,99 @@ def _grok_post(payload: dict, key: str) -> dict:
     return body
 
 
+def _openai_model() -> str:
+    return _named_model("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
+
+
+def _openai_base_url() -> str:
+    raw = os.environ.get("OPENAI_BASE_URL")
+    if raw is None or raw.strip() == "":
+        return DEFAULT_OPENAI_BASE_URL
+    return raw.strip().rstrip("/")
+
+
+def _openai_key() -> str:
+    raw = os.environ.get("OPENAI_API_KEY")
+    if raw is None or raw.strip() == "":
+        raise NarrativeError("OPENAI_API_KEY is not set")
+    return raw.strip()
+
+
+# max_completion_tokens counts reasoning and the JSON answer. This reserve
+# keeps a low-effort trace from ending the call before the object is written.
+REASONING_TOKEN_RESERVE = 4096
+
+
+def _reasoning_effort(model: str) -> str | None:
+    """low is on for every GPT-5 and GPT-6 model. None omits the field."""
+    if model.casefold().startswith(("gpt-5", "gpt-6")):
+        return "low"
+    return None
+
+
+def _openai_payload(messages: list[dict], num_predict: int) -> dict:
+    model = _openai_model()
+    effort = _reasoning_effort(model)
+    payload = {
+        "model": model,
+        "messages": messages,
+        "max_completion_tokens": num_predict,
+        "response_format": {"type": "json_object"},
+    }
+    # Reasoning models reject temperature unless effort is none.
+    if effort is None:
+        payload["temperature"] = TEMPERATURE
+    else:
+        payload["reasoning_effort"] = effort
+        payload["max_completion_tokens"] = num_predict + REASONING_TOKEN_RESERVE
+    return payload
+
+
+def _openai_chat(messages: list[dict], num_predict: int) -> dict:
+    return _timed_openai(_openai_payload(messages, num_predict))
+
+
+def _timed_openai(payload: dict) -> dict:
+    started = time.perf_counter()
+    body = _openai_post(payload, _openai_key())
+    elapsed_ns = int((time.perf_counter() - started) * _NS)
+    return _stamp_duration(_chat_choice(body, "openai"), elapsed_ns)
+
+
+def _openai_post(payload: dict, key: str) -> dict:
+    request = urllib.request.Request(
+        f"{_openai_base_url()}/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {key}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_S) as response:
+            body = json.load(response)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read(240).decode("utf-8", "replace").replace(key, "")
+        raise NarrativeError(f"openai request failed: HTTP {exc.code} {detail}") from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise NarrativeError(f"openai request failed: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise NarrativeError("openai response was not valid JSON") from exc
+    if not isinstance(body, dict):
+        raise NarrativeError("openai response was not an object")
+    return body
+
+
 def _post_provider(payload: dict) -> dict:
     """Post a narrative request through the configured provider."""
-    if _llm_provider() == "deepseek":
-        return _deepseek_response(_deepseek_post(payload, _deepseek_key()))
+    provider = _llm_provider()
+    if provider == "deepseek":
+        return _timed_deepseek(payload)
+    if provider == "openai":
+        return _timed_openai(payload)
+    if provider == "grok":
+        return _timed_grok(payload)
     return _post(payload)
 
 
@@ -466,6 +648,12 @@ def _post(payload: dict) -> dict:
     try:
         with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_S) as response:
             body = json.load(response)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read(240).decode("utf-8", "replace").strip()
+        model = payload.get("model", "")
+        raise NarrativeError(
+            f"ollama request failed: HTTP {exc.code} for model {model} {detail}"
+        ) from exc
     except (urllib.error.URLError, TimeoutError) as exc:
         raise NarrativeError(f"ollama request failed: {exc}") from exc
     except json.JSONDecodeError as exc:
@@ -483,7 +671,7 @@ def _token_count(response: dict) -> int:
     """Prompt tokens plus generated tokens from the narrative response."""
     total = 0
     saw = False
-    for key in ("prompt_eval_count", "eval_count"):
+    for key in ("prompt_eval_count", "eval_count", "reasoning_tokens"):
         value = response.get(key)
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             continue

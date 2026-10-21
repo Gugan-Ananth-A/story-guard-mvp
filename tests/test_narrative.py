@@ -2,7 +2,9 @@
 
 import copy
 import inspect
+import io
 import json
+import urllib.error
 
 import pytest
 
@@ -274,6 +276,7 @@ def test_cold_start_is_outside_the_generation_cap(monkeypatch):
 def test_host_and_model_come_from_the_environment(monkeypatch):
     monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:9999/")
     monkeypatch.setenv("OLLAMA_MODEL", "phi4-mini")
+    monkeypatch.delenv("STORY_GUARD_MODEL", raising=False)
     monkeypatch.delenv("ADO_PAT", raising=False)
     seen = {}
 
@@ -307,10 +310,30 @@ def test_host_and_model_come_from_the_environment(monkeypatch):
     assert "tools" not in seen["body"]
 
 
+def test_ollama_http_error_names_the_missing_model(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "ollama")
+    monkeypatch.setenv("OLLAMA_MODEL", "missing-model")
+    monkeypatch.delenv("STORY_GUARD_MODEL", raising=False)
+
+    def fake_urlopen(request, timeout):
+        raise urllib.error.HTTPError(
+            request.full_url,
+            404,
+            "Not Found",
+            hdrs=None,
+            fp=io.BytesIO(b'{"error":"model not found"}'),
+        )
+
+    monkeypatch.setattr("story_guard.narrative.urllib.request.urlopen", fake_urlopen)
+    with pytest.raises(NarrativeError, match="missing-model"):
+        ollama_chat([{"role": "user", "content": "Return JSON."}])
+
+
 def test_grok_chat_posts_json_to_xai(monkeypatch):
     monkeypatch.setenv("STORY_GUARD_LLM", "grok")
     monkeypatch.setenv("XAI_API_KEY", "test-key")
     monkeypatch.delenv("XAI_MODEL", raising=False)
+    monkeypatch.delenv("STORY_GUARD_MODEL", raising=False)
     seen = {}
 
     class _Body:
@@ -368,6 +391,8 @@ def test_deepseek_narrative_uses_json_chat_completions(monkeypatch):
     monkeypatch.setenv("STORY_GUARD_LLM", "deepseek")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "deepseek-test-key")
     monkeypatch.delenv("DEEPSEEK_MODEL", raising=False)
+    monkeypatch.delenv("STORY_GUARD_MODEL", raising=False)
+    monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
     seen = {}
 
     class _Body:
@@ -409,9 +434,10 @@ def test_deepseek_narrative_uses_json_chat_completions(monkeypatch):
 
     assert seen["url"] == "https://api.deepseek.com/chat/completions"
     assert seen["timeout"] == narrative.HTTP_TIMEOUT_S
-    assert seen["body"]["model"] == "deepseek-chat"
+    assert seen["body"]["model"] == "deepseek-flash"
     assert seen["body"]["max_tokens"] == narrative.MAX_TOKENS
     assert seen["body"]["response_format"] == {"type": "json_object"}
+    assert seen["body"]["thinking"] == {"type": "disabled"}
     assert seen["body"]["stream"] is False
     assert "think" not in seen["body"]
     assert seen["authorization"] == "Bearer deepseek-test-key"
@@ -424,6 +450,253 @@ def test_deepseek_chat_requires_an_api_key(monkeypatch):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     with pytest.raises(NarrativeError, match="DEEPSEEK_API_KEY"):
         ollama_chat([{"role": "user", "content": "Return JSON."}])
+
+
+def test_chatgpt_narrative_uses_json_chat_completions(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "chatgpt")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-test-key")
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.setenv("STORY_GUARD_MODEL", "gpt-5.6-terra")
+    seen = {}
+
+    def fake_urlopen(request, timeout):
+        seen["url"] = request.full_url
+        seen["body"] = json.loads(request.data.decode("utf-8"))
+        seen["authorization"] = request.get_header("Authorization")
+        raw = json.dumps(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": json.dumps(_good()),
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 8, "completion_tokens": 7},
+            }
+        ).encode("utf-8")
+        return _OllamaBody(raw)
+
+    monkeypatch.setattr("story_guard.narrative.urllib.request.urlopen", fake_urlopen)
+    result = write_narrative(_score())
+    assert seen["url"] == "https://api.openai.com/v1/chat/completions"
+    assert seen["body"]["model"] == "gpt-5.6-terra"
+    assert seen["body"]["max_completion_tokens"] == (
+        narrative.MAX_TOKENS + narrative.REASONING_TOKEN_RESERVE
+    )
+    assert seen["body"]["response_format"] == {"type": "json_object"}
+    assert seen["body"]["reasoning_effort"] == "low"
+    assert "temperature" not in seen["body"]
+    assert "tools" not in seen["body"]
+    assert seen["authorization"] == "Bearer openai-test-key"
+    assert result["narrative"] == _good()
+    assert narrative.configured_llm() == ("openai", "gpt-5.6-terra")
+
+
+@pytest.mark.parametrize(
+    "model",
+    ["gpt-5.6-luna", "gpt-6-luna", "gpt-6-astra", "gpt-6.1-sol"],
+)
+def test_gpt_requests_enable_low_reasoning(monkeypatch, model):
+    monkeypatch.setenv("STORY_GUARD_LLM", "chatgpt")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-test-key")
+    monkeypatch.setenv("STORY_GUARD_MODEL", model)
+    seen = {}
+
+    def fake_urlopen(request, timeout):
+        seen["body"] = json.loads(request.data.decode("utf-8"))
+        raw = json.dumps(
+            {
+                "choices": [
+                    {"message": {"role": "assistant", "content": "{\"ok\": true}"}}
+                ],
+                "usage": {"prompt_tokens": 2, "completion_tokens": 1},
+            }
+        ).encode("utf-8")
+        return _OllamaBody(raw)
+
+    monkeypatch.setattr("story_guard.narrative.urllib.request.urlopen", fake_urlopen)
+    ollama_chat([{"role": "user", "content": "Return JSON."}], num_predict=256)
+    assert seen["body"]["model"] == model
+    assert seen["body"]["reasoning_effort"] == "low"
+    assert "temperature" not in seen["body"]
+    assert seen["body"]["max_completion_tokens"] == 256 + narrative.REASONING_TOKEN_RESERVE
+
+
+def test_older_openai_model_keeps_temperature(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "chatgpt")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-test-key")
+    monkeypatch.setenv("STORY_GUARD_MODEL", "gpt-4o")
+    seen = {}
+
+    def fake_urlopen(request, timeout):
+        seen["body"] = json.loads(request.data.decode("utf-8"))
+        raw = json.dumps(
+            {
+                "choices": [
+                    {"message": {"role": "assistant", "content": "{\"ok\": true}"}}
+                ],
+                "usage": {"prompt_tokens": 2, "completion_tokens": 1},
+            }
+        ).encode("utf-8")
+        return _OllamaBody(raw)
+
+    monkeypatch.setattr("story_guard.narrative.urllib.request.urlopen", fake_urlopen)
+    ollama_chat([{"role": "user", "content": "Return JSON."}], num_predict=256)
+    assert "reasoning_effort" not in seen["body"]
+    assert seen["body"]["temperature"] == narrative.TEMPERATURE
+    assert seen["body"]["max_completion_tokens"] == 256
+
+
+def _openai_completion(message: dict, usage: dict, finish_reason: str = "stop") -> bytes:
+    return json.dumps(
+        {
+            "choices": [
+                {"message": message, "finish_reason": finish_reason},
+            ],
+            "usage": usage,
+        }
+    ).encode("utf-8")
+
+
+def test_openai_reasoning_json_comes_from_the_answer(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "chatgpt")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-test-key")
+    monkeypatch.setenv("STORY_GUARD_MODEL", "gpt-6-astra")
+    answer = json.dumps({"ok": True, "mapped_test_ids": ["121221"]})
+
+    def fake_urlopen(request, timeout):
+        return _OllamaBody(
+            _openai_completion(
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "reasoning_text", "text": '{"ok": false}'},
+                        {"type": "text", "text": answer},
+                    ],
+                    "reasoning_content": '{"ok": false}',
+                },
+                {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 50,
+                    "completion_tokens_details": {"reasoning_tokens": 40},
+                },
+            )
+        )
+
+    monkeypatch.setattr("story_guard.narrative.urllib.request.urlopen", fake_urlopen)
+    response = ollama_chat([{"role": "user", "content": "Return JSON."}])
+    assert response["message"]["content"] == answer
+    assert "thinking" not in response["message"]
+    assert response["eval_count"] == 10
+    assert response["reasoning_tokens"] == 40
+    assert _load_response_json(response) == {"ok": True, "mapped_test_ids": ["121221"]}
+    assert narrative._token_count(response) == 60
+    narrative._check_cap(response)
+
+
+def test_openai_length_stop_with_no_answer_is_retried(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "chatgpt")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-test-key")
+    monkeypatch.setenv("STORY_GUARD_MODEL", "gpt-6-astra")
+
+    def fake_urlopen(request, timeout):
+        return _OllamaBody(
+            _openai_completion(
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "reasoning_content": json.dumps({"ok": True}),
+                },
+                {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 4096,
+                    "completion_tokens_details": {"reasoning_tokens": 4096},
+                },
+                finish_reason="length",
+            )
+        )
+
+    monkeypatch.setattr("story_guard.narrative.urllib.request.urlopen", fake_urlopen)
+    with pytest.raises(NarrativeError, match="stopped before the JSON object") as caught:
+        ollama_chat([{"role": "user", "content": "Return JSON."}])
+    assert caught.value.retry_hint is True
+
+
+def test_openai_chat_requires_an_api_key(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "openai")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("STORY_GUARD_MODEL", raising=False)
+    with pytest.raises(NarrativeError, match="OPENAI_API_KEY"):
+        ollama_chat([{"role": "user", "content": "Return JSON."}])
+
+
+def test_story_guard_model_overrides_the_provider_model(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "deepseek-test-key")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-flash")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1/")
+    monkeypatch.setenv("STORY_GUARD_MODEL", "deepseek-v4-pro")
+    seen = {}
+
+    def fake_urlopen(request, timeout):
+        seen["url"] = request.full_url
+        seen["body"] = json.loads(request.data.decode("utf-8"))
+        raw = json.dumps(
+            {
+                "choices": [
+                    {"message": {"role": "assistant", "content": "{\"ok\": true}"}}
+                ],
+                "usage": {"prompt_tokens": 2, "completion_tokens": 1},
+            }
+        ).encode("utf-8")
+        return _OllamaBody(raw)
+
+    monkeypatch.setattr("story_guard.narrative.urllib.request.urlopen", fake_urlopen)
+    response = ollama_chat([{"role": "user", "content": "Return JSON."}], num_predict=256)
+    assert seen["url"] == "https://api.deepseek.com/v1/chat/completions"
+    assert seen["body"]["model"] == "deepseek-v4-pro"
+    assert response["total_duration"] >= 0
+    assert response["eval_duration"] == response["total_duration"]
+    assert narrative.configured_llm() == ("deepseek", "deepseek-v4-pro")
+
+
+def test_blank_story_guard_model_keeps_the_provider_default(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "ollama")
+    monkeypatch.setenv("STORY_GUARD_MODEL", "   ")
+    monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+    assert narrative.configured_llm() == ("ollama", "qwen3.5:4b")
+
+
+def test_grok_narrative_posts_to_xai(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "grok")
+    monkeypatch.setenv("XAI_API_KEY", "test-key")
+    monkeypatch.setenv("STORY_GUARD_MODEL", "grok-4")
+    seen = {}
+
+    def fake_urlopen(request, timeout):
+        seen["url"] = request.full_url
+        seen["body"] = json.loads(request.data.decode("utf-8"))
+        raw = json.dumps(
+            {
+                "choices": [
+                    {"message": {"role": "assistant", "content": json.dumps(_good())}}
+                ],
+                "usage": {"prompt_tokens": 3, "completion_tokens": 2},
+            }
+        ).encode("utf-8")
+        return _OllamaBody(raw)
+
+    monkeypatch.setattr("story_guard.narrative.urllib.request.urlopen", fake_urlopen)
+    result = write_narrative(_score())
+    assert seen["url"] == narrative.GROK_CHAT_URL
+    assert seen["body"]["model"] == "grok-4"
+    assert seen["body"]["response_format"] == {"type": "json_object"}
+    assert "format" not in seen["body"]
+    assert result["narrative"] == _good()
 
 
 class _OllamaBody:

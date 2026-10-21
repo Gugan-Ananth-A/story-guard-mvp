@@ -108,7 +108,7 @@ Tighter than phase 1. This pack is documents + contracts + static mocks, not shi
 - No production-form agent loop (no parser → auditor → writer pipeline that “is the product”).
 - No live project connection. Dummy org / fixtures only. Never point code at a real delivery board.
 - No pixel-perfect PDF engine in the planning week. Static mock PDF or formatted doc that shows section order. Rendering library is a stack decision, not a design debate.
-- No model bake-off. Development default is **Qwen3.5 4B** via Ollama; fallback is **Phi-4 Mini**. **DeepSeek Chat** is an optional API provider. Local runs fit an 8 GB Mac; context is loaded at 8,192. See `docs/orchestration-and-cost.md` §4.5.
+- No model bake-off. Development default is **Qwen3.5 4B** via Ollama; fallback is **Phi-4 Mini**. **DeepSeek** (`deepseek-flash`, changeable with `DEEPSEEK_MODEL` or `STORY_GUARD_MODEL`) is an optional API provider. Local runs fit an 8 GB Mac; context is loaded at 8,192. See `docs/orchestration-and-cost.md` §4.5.
 - No Azure Test Plans dependency. JSON / SQLite dummy store is the default.
 - No dual-track orchestrators. Proposed lock: **LangGraph** as a graph of code nodes, and **one** narrative LLM call. CrewAI, and a LangGraph supervisor over specialist models, are out of phase 1 (`docs/orchestration-and-cost.md`).
 - No scope leaks into Slack / Jira / dashboards / billing / mid-flow HITL.
