@@ -101,20 +101,29 @@ def test_fetch_story_and_bug_writes_no_fixtures_or_artifacts(
         if path.is_file()
     }
     artifacts_dir = tmp_path / "artifacts"
-    monkeypatch.setenv("ADO_PROJECT_URL", project_url)
-    monkeypatch.setenv("ADO_PAT", "offline-test-pat")
+    client = ADOClient(project_url, "offline-test-pat", opener=opener)
+    monkeypatch.delenv("ADO_PROJECT_URL", raising=False)
+    monkeypatch.delenv("ADO_PAT", raising=False)
     monkeypatch.setenv("STORY_GUARD_ARTIFACTS_DIR", str(artifacts_dir))
-    monkeypatch.setattr("story_guard.ado_client.urlopen", opener)
+    monkeypatch.setattr(
+        ADOClient,
+        "from_env",
+        classmethod(lambda _cls: client),
+    )
 
     result = main(["fetch-stories", "--story-ids", "100", "999"])
 
     captured = capsys.readouterr()
     records = json.loads(captured.out)
-    assert result == 1
+    assert result == 0
+    assert len(records) == 1
     assert records[0]["story"]["id"] == "100"
-    assert records[1]["id"] == "999"
-    assert records[1]["error"]["code"] == "not_user_story"
+    assert [bug["id"] for bug in records[0]["bugs"]] == ["999"]
     assert all(request.get_method() == "GET" for request in requests)
+    assert [
+        int(request.full_url.rsplit("/", 1)[-1].split("?", 1)[0])
+        for request in requests
+    ] == [100, 999, 999]
     assert {
         path.relative_to(fixture_dir): path.read_bytes()
         for path in fixture_dir.rglob("*")
