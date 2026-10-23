@@ -501,6 +501,10 @@ def _template_values(
                 f"{bug.get('status', '')}, age {bug.get('age', bug.get('age_days', ''))}, "
                 f"linked test {bug.get('linked_tc_id', '')}, found in {bug.get('found_in', bug.get('found_in_env', ''))}"
             )
+            for label, key in (("description", "description"), ("repro", "repro_steps")):
+                detail = str(bug.get(key) or "").strip()
+                if detail:
+                    bug_lines.append(f"{bug.get('id', '')} {label}: {detail}")
     if not bugs:
         bug_lines.append("No bugs.")
     actions = narrative.get("actions", score.get("recommended_actions", []))
@@ -611,7 +615,14 @@ def render_pdf(
     output_file = Path(out_path)
     temporary = output_file.with_suffix(output_file.suffix + ".tmp")
 
-    from story_guard.report_layout import MARGIN_X, PAGE_SIZE, example_flowables, layout_errors
+    from story_guard.report_layout import (
+    MARGIN_X,
+    PAGE_BOTTOM,
+    PAGE_SIZE,
+    PAGE_TOP,
+    example_flowables,
+    layout_errors,
+)
 
     flowables = example_flowables(score, narrative, record)
 
@@ -622,8 +633,8 @@ def render_pdf(
             pagesize=PAGE_SIZE,
             leftMargin=MARGIN_X,
             rightMargin=MARGIN_X,
-            topMargin=0.34 * inch,
-            bottomMargin=0.5 * inch,
+            topMargin=PAGE_TOP,
+            bottomMargin=PAGE_BOTTOM,
             title=str(score.get("title") or (score.get("story") or {}).get("title", "Story Health Report")),
         )
         document.build(flowables, canvasmaker=_NumberedCanvas)

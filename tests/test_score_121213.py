@@ -16,6 +16,8 @@ _SCORE_KEYS = {
     "scenario_count",
     "scenarios",
     "test_count",
+    "test_cases",
+    "test_suite_truncated",
     "mapped_count",
     "bug_count",
     "open_bug_count",
@@ -62,6 +64,10 @@ def test_score_fixture_counts():
     assert all(row["gap"] == "No coverage" for row in score["scenarios"])
     assert all(row["row_status"] == "none" for row in score["scenarios"])
     assert score["test_count"] == 18
+    assert len(score["test_cases"]) == 18
+    assert all(case["id"] for case in score["test_cases"])
+    assert all(case["steps"] == [] for case in score["test_cases"])
+    assert score["test_suite_truncated"] is False
     assert score["mapped_count"] == 0
     assert score["bug_count"] == 0
     assert score["open_bug_count"] == 0
@@ -88,6 +94,33 @@ def test_score_fixture_counts():
         line for line in record["description"].splitlines() if line.lstrip().startswith("Scenario:")
     ]
     assert len(scenario_lines) == 8
+
+
+def test_score_carries_optional_test_step_pairs():
+    record = _load()
+    tests = [dict(test) for test in record["tests"]]
+    tests[0] = dict(
+        tests[0],
+        steps=[
+            {
+                "action": "Enter valid credentials and select Login.",
+                "expected_result": "The user reaches the dashboard.",
+            }
+        ],
+    )
+    score = score_health(dict(record, tests=tests))
+
+    assert score["test_cases"][0] == {
+        "id": str(tests[0]["id"]),
+        "title": tests[0]["title"],
+        "steps": [
+            {
+                "action": "Enter valid credentials and select Login.",
+                "expected_result": "The user reaches the dashboard.",
+            }
+        ],
+    }
+    assert score["test_cases"][1]["steps"] == []
 
 
 def test_score_empty_mapped_ac_ids_covers_nothing():

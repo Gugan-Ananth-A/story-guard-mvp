@@ -281,3 +281,81 @@ def test_render_pdf_missing_template_leaves_no_partial_output(tmp_path: Path) ->
         render_pdf(hand_built_score(), tmp_path / "missing.md", output_path)
     assert not output_path.exists()
     assert not output_path.with_suffix(".pdf.tmp").exists()
+
+
+def test_long_review_notes_flow_past_the_summary_table(tmp_path: Path) -> None:
+    """Bug text and later findings must not sit in the one-row summary table."""
+    marker = "BUGDETAILMARKER"
+    narrative = {
+        "headline": "No open bugs.",
+        "observations": [
+            "Story health - No open bugs",
+            "8 acceptance criteria, 0 adequately covered, 0 with gaps, 8 not covered.",
+            "18 tests and 0 mapped.",
+            "0 bugs, with 0 open.",
+            f"Bug 122590 description: {marker} " + ("x" * 1500),
+            "Bug 122590 repro steps part 1 of 2: " + ("y" * 1200),
+            "Bug 122590 repro steps part 2 of 2: " + ("z" * 200),
+            *[f"Finding {index} names AC-1." for index in range(1, 25)],
+        ],
+        "actions": [],
+    }
+    output_path = tmp_path / "long-notes.pdf"
+    render_pdf(hand_built_score(), TEMPLATE, output_path, narrative=narrative)
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(output_path))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    assert "Key Observations" in text
+    assert "Review notes" in text
+    assert marker in text
+    assert "Finding 24" in text
+    assert len(reader.pages) >= 2
+
+
+def test_long_actions_flow_past_the_summary_table(tmp_path: Path) -> None:
+    """A side panel taller than one page used to raise LayoutError."""
+    actions = [
+        {
+            "owner": "QA",
+            "text": (
+                f"ACTIONMARKER-{index:02d} close the gap. "
+                + ("Check the retained email and the inline error. " * 12)
+            ),
+        }
+        for index in range(16)
+    ]
+    actions.append(
+        {
+            "owner": "Dev",
+            "text": "HUGEACTIONMARKER " + ("Reproduce the open defect. " * 400),
+        }
+    )
+    narrative = {
+        "headline": "Coverage gaps remain.",
+        "observations": [
+            "Story health - No open bugs",
+            *[
+                f"OBSMARKER-{index:02d} "
+                + ("This criterion still has a coverage gap. " * 4)
+                for index in range(10)
+            ],
+        ],
+        "actions": actions,
+    }
+    output_path = tmp_path / "long-actions.pdf"
+    render_pdf(hand_built_score(), TEMPLATE, output_path, narrative=narrative)
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(output_path))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    assert "Key Observations" in text
+    assert "Recommended actions" in text
+    for index in range(16):
+        assert f"ACTIONMARKER-{index:02d}" in text
+    for index in range(10):
+        assert f"OBSMARKER-{index:02d}" in text
+    assert "HUGEACTIONMARKER" in text
+    assert len(reader.pages) >= 2

@@ -32,6 +32,8 @@ In live analysis these source links are treated as untrusted input. The model
 reviews one AC against bounded suite batches and produces ephemeral links and
 AC-quality findings for the report; it does not mutate `mapped_ac_ids`.
 
+`steps` is optional. When present, it is an array of `{ "action": string, "expected_result": string }` objects. A case without steps remains in the suite with an empty `steps` array. Live plan rows may instead store steps as one plain-text string, plus `description` and `parameters`.
+
 ## BugRecord
 
 Keys: `id`, `title`, `severity`, `priority`, `status`, `age`, `found_in`, `linked_story_id`, `linked_tc_id`, `assigned_to`, `application`, `created`.

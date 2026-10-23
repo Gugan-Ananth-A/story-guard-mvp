@@ -189,7 +189,7 @@ Development runs on a Mac with **8 GB** of unified memory. macOS, the browser, a
 | Runner | **Ollama** by default, or **DeepSeek API** when selected with `STORY_GUARD_LLM=deepseek`. |
 | Default | **Qwen3.5 4B**, tag `qwen3.5:4b`, about 3.3 GB. |
 | Fallback | **Phi-4 Mini**, tag `phi4-mini`, about 2.5 GB. Same `num_ctx`. Use it when the default will not stay resident with the editor open. |
-| Hosted option | **DeepSeek Chat**, configured with `DEEPSEEK_API_KEY` and `DEEPSEEK_MODEL=deepseek-chat`; no local model is loaded for API calls. |
+| Hosted option | **ChatGPT API** (`STORY_GUARD_LLM=chatgpt`, `OPENAI_API_KEY`, `OPENAI_MODEL`, default `gpt-5.6-luna`) or **DeepSeek API** (`DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL`, default `deepseek-flash`). `STORY_GUARD_MODEL`, when set, overrides the provider model. No local model is loaded for API calls. |
 | Context | Ollama uses `num_ctx` **8192**. DeepSeek uses its API `max_tokens` limit. |
 | Out | A second resident model, and `qwen3.5:9b` (about 6.6 GB), which does not stay resident on this Mac. |
 
@@ -203,7 +203,7 @@ Development runs on a Mac with **8 GB** of unified memory. macOS, the browser, a
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | D6 | Orchestrator | LangGraph as a code-node workflow | Durable state, later HITL, traces; nodes are Python; only one node is an LLM | CrewAI as primary; dual-track LangGraph+CrewAI; PydanticAI / Agents SDK as primary | 29 Sep 2026 | Gugan | Proposed lock |
 | D10 | Single vs multi-agent | Single pipeline: code scores, one LLM narrates | Task is small, shared-context, deterministic; crews cost 3–15× and invite guessed mappings | Parser+auditor+analyst+correlator+writer crew; supervisor-of-specialists in LangGraph | 29 Sep 2026 | Gugan | Proposed lock |
-| D7 | Development narrative model | Ollama by default (`qwen3.5:4b`, fallback `phi4-mini`) with optional DeepSeek API (`deepseek-chat`). | Local development remains keyless, while the API option removes local memory constraints. | 7B+ checkpoints; loading two models; native 128k context | 29 Sep 2026 | Gugan | Proposed lock |
+| D7 | Development narrative model | Ollama by default (`qwen3.5:4b`, fallback `phi4-mini`) with optional DeepSeek API (`deepseek-flash`, or `STORY_GUARD_MODEL`). | Local development remains keyless, while the API option removes local memory constraints. | 7B+ checkpoints; loading two models; native 128k context | 29 Sep 2026 | Gugan | Proposed lock |
 
 Rejected options, one line each (Overview stack table):
 

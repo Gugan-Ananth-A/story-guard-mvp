@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from story_guard.analysis import analyze_live, result_from_judgment
+from story_guard.analysis import _PROMPT, analyze_live, result_from_judgment
 from story_guard.narrative import NarrativeError
 
 
@@ -187,7 +187,8 @@ def test_ollama_judges_one_criterion_against_one_suite(monkeypatch):
     assert "122590" not in user
     assert "How to judge coverage" in system
     assert "one acceptance criterion and one suite" in system
-    assert 'Sharing a word such as "login" is not enough.' in system
+    assert 'Sharing only a generic word such as "login" is not enough.' in system
+    assert "P is happy, N is negative, and A is adhoc." in system
     assert "no listed test checks" in system
     assert "Do not use a percent sign" in system
     assert "partially covered" in system
@@ -602,11 +603,11 @@ def test_unknown_ids_and_other_types_are_dropped_and_health_stays_on_the_bugs():
     assert rows["AC-02"]["mapped_test_ids"] == []
     assert rows["AC-02"]["row_status"] == "none"
     assert score["coverage_by_type"]["happy"] == 1
-    assert score["coverage_by_type"]["negative"] == 1
+    assert score["coverage_by_type"]["negative"] == 2
     assert score["coverage_by_type"]["adhoc"] == 1
     assert score["coverage_by_type"]["edge"] == 0
     assert score["coverage_by_type"]["security"] == 0
-    assert score["coverage_by_type"]["unset"] == 1
+    assert score["coverage_by_type"]["unset"] == 0
     assert score["health"] == "Critical"
     assert score["health_band"] == "At Risk"
     assert "test_coverage_percent" not in score
@@ -644,7 +645,8 @@ def test_a_finding_with_a_percent_sign_is_replaced(monkeypatch):
     assert "%" not in text
     assert "No listed test checks AC-02." in text
     assert "AC-01 is checked by 121216." in text
-    assert result["score"]["coverage_by_type"]["unset"] == 2
+    assert result["score"]["coverage_by_type"]["unset"] == 1
+    assert result["score"]["coverage_by_type"]["adhoc"] == 1
     assert result["score"]["coverage_by_type"]["edge"] == 0
     assert rows["AC-01"]["mapped_test_ids"] == ["121216"]
     assert result["score"]["health"] == "High"
@@ -755,3 +757,338 @@ def test_model_failure_names_the_story_and_stops_that_review(monkeypatch, mode):
     with pytest.raises(NarrativeError, match="story 123086"):
         analyze_live(record)
     assert calls["n"] == (ATTEMPTS if mode == "json" else 1)
+
+
+def test_long_test_text_is_reviewed_in_parts_and_combined(monkeypatch):
+    marker = "UNIQUE-NEGATIVE-MARKER"
+    steps = ("a" * 1200) + marker + ("b" * 100)
+    seen = []
+
+    def fake_chat(messages, num_predict=8192):
+        payload = json.loads(messages[1]["content"].split("\n", 1)[1])
+        texts = [item["text"] for item in payload["tests"]]
+        seen.append(texts)
+        mapped = ["121216"] if any(marker in text for text in texts) else []
+        body = {
+            "ac_id": payload["acceptance_criterion"]["ac_id"],
+            "mapped_test_ids": mapped,
+            "test_types": {"121216": "negative"} if mapped else {},
+            "coverage_status": "partial" if mapped else "none",
+            "quality": {"status": "good", "testable": True, "issues": []},
+            "finding": "AC-01 is checked by 121216." if mapped else "No listed test checks AC-01.",
+        }
+        return {
+            "message": {"content": json.dumps(body)},
+            "prompt_eval_count": 1,
+            "eval_count": 1,
+        }
+
+    record = _record()
+    record["bugs"] = []
+    record["acceptance_criteria"] = [record["acceptance_criteria"][0]]
+    record["tests"] = [
+        {
+            "id": "121216",
+            "title": "Admin login",
+            "type": "",
+            "steps": steps,
+            "suite_id": "S1",
+            "suite_name": "Suite",
+        }
+    ]
+    monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
+    result = analyze_live(record)
+    row = result["score"]["scenarios"][0]
+    joined = "".join(text for texts in seen for text in texts)
+
+    assert len(seen) >= 2
+    assert marker in joined
+    assert steps in joined
+    assert row["mapped_test_ids"] == ["121216"]
+    assert "Negative scenarios are covered" in row["depth"]
+
+
+def test_story_description_is_sent_in_parts(monkeypatch):
+    description = "D" * 1300
+    parts = []
+
+    def fake_chat(messages, num_predict=8192):
+        payload = json.loads(messages[1]["content"].split("\n", 1)[1])
+        parts.append(payload["story_description"]["text"])
+        ac_id = payload["acceptance_criterion"]["ac_id"]
+        return {
+            "message": {
+                "content": json.dumps(
+                    {
+                        "ac_id": ac_id,
+                        "mapped_test_ids": [],
+                        "finding": f"No listed test checks {ac_id}.",
+                    }
+                )
+            },
+            "prompt_eval_count": 1,
+            "eval_count": 1,
+        }
+
+    record = _record()
+    record["bugs"] = []
+    record["description"] = description
+    record["acceptance_criteria"] = [record["acceptance_criteria"][0]]
+    record["tests"] = [record["tests"][0]]
+    monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
+    analyze_live(record)
+
+    assert len(parts) == 2
+    assert "".join(parts) == description
+
+
+def test_description_scenario_is_judged_with_the_acceptance_criteria(monkeypatch):
+    calls = []
+
+    def fake_chat(messages, num_predict=8192):
+        payload = json.loads(messages[1]["content"].split("\n", 1)[1])
+        ac_id = payload["acceptance_criterion"]["ac_id"]
+        calls.append(ac_id)
+        return {
+            "message": {
+                "content": json.dumps(
+                    {
+                        "ac_id": ac_id,
+                        "mapped_test_ids": [],
+                        "finding": f"No listed test checks {ac_id}.",
+                    }
+                )
+            },
+            "prompt_eval_count": 1,
+            "eval_count": 1,
+        }
+
+    record = _record()
+    record["bugs"] = []
+    record["acceptance_criteria"] = [record["acceptance_criteria"][0]]
+    record["scenarios"] = [
+        {
+            "ac_id": "AC-05",
+            "text": "A password reset email is sent.",
+            "testable": True,
+            "flags": [],
+        }
+    ]
+    monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
+    result = analyze_live(record)
+    rows = {row["ac_id"]: row for row in result["score"]["scenarios"]}
+
+    assert calls == ["AC-01", "AC-05"]
+    assert rows["AC-05"]["row_status"] == "none"
+
+
+def test_the_same_test_can_cover_a_different_path_for_each_criterion():
+    record = _record()
+    record["bugs"] = []
+    record["tests"] = [
+        {
+            "id": "42",
+            "title": "Login",
+            "type": "",
+            "mapped_ac_ids": [],
+        }
+    ]
+    judgment = _judgment()
+    judgment["reviews"] = [
+        {
+            "ac_id": "AC-01",
+            "mapped_test_ids": ["42"],
+            "test_types": {"42": "happy"},
+            "coverage_status": "partial",
+            "finding": "AC-01 is checked by 42.",
+        },
+        {
+            "ac_id": "AC-02",
+            "mapped_test_ids": ["42"],
+            "test_types": {"42": "negative"},
+            "coverage_status": "partial",
+            "finding": "AC-02 is checked by 42.",
+        },
+    ]
+    result = result_from_judgment(record, judgment)
+    rows = {row["ac_id"]: row for row in result["score"]["scenarios"]}
+
+    assert "Positive scenarios are covered" in rows["AC-01"]["depth"]
+    assert "No Negative scenarios Covered" in rows["AC-01"]["gap"]
+    assert "Negative scenarios are covered" in rows["AC-02"]["depth"]
+    assert "No Positive scenarios Covered" in rows["AC-02"]["gap"]
+
+
+def test_title_token_sets_the_path_and_failure_proof_stays_positive():
+    record = _record()
+    record["bugs"] = []
+    record["acceptance_criteria"] = [
+        {
+            "ac_id": "AC-02",
+            "text": (
+                "Invalid credentials. When the user submits an unregistered email, "
+                "or a registered email with the wrong password, an error says the "
+                "credentials are invalid, and the user stays on the login page."
+            ),
+            "testable": True,
+            "flags": [],
+        }
+    ]
+    record["tests"] = [
+        {"id": "124311", "title": "[US-XXXXX-N01] Verify login fails with an unregistered email address", "type": ""},
+        {"id": "124312", "title": "[US-XXXXX-N02] Verify login fails with a registered email and wrong password", "type": ""},
+        {"id": "124319", "title": "[US-XXXXX-A04] Verify password field is case-sensitive", "type": ""},
+    ]
+    judgment = _judgment()
+    judgment["reviews"] = [
+        {
+            "ac_id": "AC-02",
+            "mapped_test_ids": ["124311", "124312", "124319"],
+            "test_types": {"124311": "negative", "124312": "negative", "124319": "happy"},
+            "coverage_status": "partial",
+            "finding": "AC-02 is checked by 124311, 124312, 124319.",
+        }
+    ]
+    result = result_from_judgment(record, judgment)
+    row = result["score"]["scenarios"][0]
+    paths = row  # depth and gap show the buckets
+
+    assert row["row_status"] == "adequate"
+    assert "Positive scenarios are covered" in paths["depth"]
+    assert "Negative scenarios are covered" in paths["depth"]
+    assert "Adhoc scenarios are covered" in paths["depth"]
+    assert result["score"]["coverage_by_type"]["adhoc"] == 1
+    assert result["score"]["coverage_by_type"]["negative"] == 2
+
+
+def test_negative_and_adhoc_variants_join_a_linked_behavior():
+    record = _record()
+    record["bugs"] = []
+    record["acceptance_criteria"] = [
+        {
+            "ac_id": "AC-03",
+            "text": (
+                "Password visibility — Show. When the user has entered a password "
+                "and clicks Show, the password is displayed as plain text."
+            ),
+            "testable": True,
+            "flags": [],
+        },
+        {
+            "ac_id": "AC-04",
+            "text": (
+                "Forgot Password navigation. When the user clicks Forgot Password?, "
+                "the user is redirected to the password recovery page."
+            ),
+            "testable": True,
+            "flags": [],
+        },
+    ]
+    record["tests"] = [
+        {"id": "124309", "title": "[US-XXXXX-P03] Verify password is displayed as plain text when Show is clicked", "type": ""},
+        {"id": "124314", "title": "[US-XXXXX-N04] Verify password remains masked when Show is NOT clicked", "type": ""},
+        {"id": "124316", "title": "[US-XXXXX-A01] Verify Show/Hide toggle behavior with empty password field", "type": ""},
+        {"id": "124311", "title": "[US-XXXXX-N01] Verify login fails with an unregistered email address", "type": ""},
+        {"id": "124310", "title": "[US-XXXXX-P04] Verify Forgot Password? link redirects to the password recovery page", "type": ""},
+        {"id": "124321", "title": "[US-XXXXX-A06] Verify Forgot Password? link is reachable across viewports", "type": ""},
+        {"id": "124401", "title": "[US-XXXXX-N09] Verify the footer link opens the help page", "type": ""},
+        {"id": "124402", "title": "[US-XXXXX-A10] Verify the footer link survives a refresh", "type": ""},
+    ]
+    judgment = _judgment()
+    judgment["reviews"] = [
+        {
+            "ac_id": "AC-03",
+            "mapped_test_ids": ["124309"],
+            "test_types": {"124309": "happy"},
+            "coverage_status": "adequate",
+            "finding": "AC-03 is checked by 124309.",
+        },
+        {
+            "ac_id": "AC-04",
+            "mapped_test_ids": ["124310", "124321"],
+            "test_types": {"124310": "happy", "124321": "happy"},
+            "coverage_status": "adequate",
+            "finding": "AC-04 is checked by 124310, 124321.",
+        },
+    ]
+    result = result_from_judgment(record, judgment)
+    rows = {row["ac_id"]: row for row in result["score"]["scenarios"]}
+
+    assert rows["AC-03"]["mapped_test_ids"] == ["124309", "124314", "124316"]
+    assert rows["AC-03"]["row_status"] == "adequate"
+    assert "124311" not in rows["AC-03"]["mapped_test_ids"]
+    assert rows["AC-04"]["mapped_test_ids"] == ["124310", "124321"]
+    assert rows["AC-04"]["row_status"] == "partial"
+    assert "No Negative scenarios Covered" in rows["AC-04"]["gap"]
+    assert "Adhoc scenarios are covered" in rows["AC-04"]["depth"]
+    assert "P is happy, N is negative, and A is adhoc." in _PROMPT
+
+
+def test_a_mapped_test_with_no_model_type_is_classified_from_its_text(monkeypatch):
+    def fake_chat(messages, num_predict=8192):
+        payload = json.loads(messages[1]["content"].split("\n", 1)[1])
+        ac_id = payload["acceptance_criterion"]["ac_id"]
+        return {
+            "message": {
+                "content": json.dumps(
+                    {
+                        "ac_id": ac_id,
+                        "mapped_test_ids": ["121220"],
+                        "finding": "AC-01 is checked by 121220.",
+                    }
+                )
+            },
+            "prompt_eval_count": 1,
+            "eval_count": 1,
+        }
+
+    record = _record()
+    record["bugs"] = []
+    record["acceptance_criteria"] = [record["acceptance_criteria"][0]]
+    record["tests"] = [
+        {
+            "id": "121220",
+            "title": "Bad password",
+            "type": "",
+            "steps": "Enter an incorrect password. An error is shown.",
+        }
+    ]
+    monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
+    result = analyze_live(record)
+    row = result["score"]["scenarios"][0]
+
+    assert row["mapped_test_ids"] == ["121220"]
+    assert "Negative scenarios are covered" in row["depth"]
+
+
+def test_bug_description_and_repro_steps_reach_the_report(monkeypatch):
+    def fake_chat(messages, num_predict=8192):
+        payload = json.loads(messages[1]["content"].split("\n", 1)[1])
+        assert "repro" not in messages[1]["content"].casefold()
+        ac_id = payload["acceptance_criterion"]["ac_id"]
+        return {
+            "message": {
+                "content": json.dumps(
+                    {
+                        "ac_id": ac_id,
+                        "mapped_test_ids": [],
+                        "finding": f"No listed test checks {ac_id}.",
+                    }
+                )
+            },
+            "prompt_eval_count": 1,
+            "eval_count": 1,
+        }
+
+    record = _record()
+    record["acceptance_criteria"] = [record["acceptance_criteria"][0]]
+    record["bugs"][0]["description"] = "The field rejects the typed character."
+    record["bugs"][0]["repro_steps"] = "R" * 1300
+    monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
+    result = analyze_live(record)
+    observations = "\n".join(result["narrative"]["observations"])
+
+    assert "Bug 122590 description: The field rejects the typed character." in observations
+    assert "Bug 122590 repro steps part 1 of 2:" in observations
+    assert "Bug 122590 repro steps part 2 of 2:" in observations
+    assert observations.count("R") == 1300

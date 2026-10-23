@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from story_guard.cli import main
-from story_guard.graph import build_generate_graph, fetch, run
+from story_guard.graph import build_generate_graph, fetch, run, write_narrative as narrative_node
 from story_guard.narrative import NarrativeError
 from story_guard.render import RenderError, render_markdown
 
@@ -60,9 +60,40 @@ def test_generate_graph_order():
     }
 
 
+def test_narrative_node_keeps_the_bounded_score_for_rendering(monkeypatch):
+    score = {"test_suite_truncated": True, "test_cases": []}
+    narrative = {"headline": "Complete", "sections": [], "actions": []}
+    monkeypatch.setattr(
+        "story_guard.graph.request_narrative",
+        lambda _score: {
+            "score": score,
+            "narrative": narrative,
+            "token_count": 12,
+            "narrative_latency_ms": 4,
+        },
+    )
+
+    result = narrative_node({"score": {"test_suite_truncated": False}})
+
+    assert result["score"] is score
+    assert result["score"]["test_suite_truncated"] is True
+
+
+def _pin_ollama_env(tmp_path, monkeypatch) -> None:
+    """The project .env owns the model selector, so this test supplies its own file."""
+    env_file = tmp_path / "selector.env"
+    env_file.write_text(
+        "STORY_GUARD_LLM=ollama\nOLLAMA_MODEL=qwen3.5:4b\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("story_guard.envfile.env_path", lambda: env_file)
+    monkeypatch.delenv("STORY_GUARD_MODEL", raising=False)
+
+
 def test_generate_writes_eight_headings_and_score_pdf(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("ADO_PAT", raising=False)
     monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
+    _pin_ollama_env(tmp_path, monkeypatch)
     monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
     monkeypatch.setattr("story_guard.graph.request_narrative", _fake_narrative)
     score = run({"story_id": "121213"})["score"]
@@ -99,6 +130,7 @@ def test_generate_writes_eight_headings_and_score_pdf(tmp_path, monkeypatch, cap
     captured = capsys.readouterr()
     printed = captured.out.strip()
     assert printed == str(report)
+    assert "[story-guard] provider ollama, model qwen3.5:4b" in captured.err
     assert "[story-guard] starting generation for story 121213" in captured.err
     assert "[story-guard] rendering Markdown and PDF reports" in captured.err
     pdf_text = pdf.read_bytes()
@@ -969,8 +1001,7 @@ def test_batch_keeps_qwen35_4b_as_the_only_loaded_model(tmp_path, monkeypatch, c
             assert test_plan_id is None
             return _live_story(str(story_id))
 
-    monkeypatch.setenv("STORY_GUARD_LLM", "ollama")
-    monkeypatch.setenv("OLLAMA_MODEL", "qwen3.5:4b")
+    _pin_ollama_env(tmp_path, monkeypatch)
     monkeypatch.setenv("LANGSMITH_API_KEY", "")
     monkeypatch.setattr("story_guard.narrative.urllib.request.urlopen", fake_urlopen)
     monkeypatch.setattr(ADOClient, "from_env", classmethod(lambda cls: FakeADOClient()))
@@ -1081,17 +1112,17 @@ def test_test_plan_id_applies_to_one_sprint_story(tmp_path, monkeypatch, capsys)
     capsys.readouterr()
 
 
-def test_sprint_requires_live(tmp_path, monkeypatch, capsys):
-    from story_guard.ado_client import ADOClient
+def test_sprint_without_ado_configuration_exits_cleanly(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("story_guard.envfile.env_path", lambda: tmp_path / "missing.env")
+    monkeypatch.delenv("ADO_PROJECT_URL", raising=False)
+    monkeypatch.delenv("ADO_PAT", raising=False)
 
-    def fail(cls):
-        raise AssertionError("ADO client was constructed")
+    result = main(["generate", "--sprint", "Project\\Sprint"])
 
-    monkeypatch.setattr(ADOClient, "from_env", classmethod(fail))
-    monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
-    assert main(["generate", "--sprint", "Ecom MVP\\Phase"]) == 1
-    assert "--sprint requires --live" in capsys.readouterr().err
-    assert list(tmp_path.iterdir()) == []
+    captured = capsys.readouterr()
+    assert result == 1
+    assert captured.out == ""
+    assert "ADO_PROJECT_URL, ADO_PAT" in captured.err
 
 
 def test_empty_sprint_generates_nothing(tmp_path, monkeypatch, capsys):
