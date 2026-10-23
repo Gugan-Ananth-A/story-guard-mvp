@@ -28,7 +28,11 @@ Keys: `id`, `title`, `type`, `mapped_ac_ids`, `last_result`, `last_result_at`, `
 
 `mapped_ac_ids` is an array of `ac_id` strings. An empty array is a real value. It means the test maps to no `ac_id` (`docs/requirements.md` §6.4).
 
-`steps` is optional. When present, it is an array of `{ "action": string, "expected_result": string }` objects. A case without steps remains in the suite with an empty `steps` array.
+In live analysis these source links are treated as untrusted input. The model
+reviews one AC against bounded suite batches and produces ephemeral links and
+AC-quality findings for the report; it does not mutate `mapped_ac_ids`.
+
+`steps` is optional. When present, it is an array of `{ "action": string, "expected_result": string }` objects. A case without steps remains in the suite with an empty `steps` array. Live plan rows may instead store steps as one plain-text string, plus `description` and `parameters`.
 
 ## BugRecord
 

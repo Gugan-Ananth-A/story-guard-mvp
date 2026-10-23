@@ -1,7 +1,7 @@
 # User Story Health Agent — Requirements Pack (Phase 1)
 
 **Status:** Freeze draft (Gugan) — 29 Sep 2026  
-**Revision:** 29 Sep 2026 — dummy story **121213** recorded in §6.2. D6/D10 and the 8 GB local runtime (D7) are proposed-locked in `docs/orchestration-and-cost.md`. Rubric-cache, tool-schema, and context-isolation constraints are in `docs/architecture.md` (not built this week). PDF library D8 is locked in `docs/pdf-library.md`.
+**Revision:** 29 Sep 2026 — dummy story **121213** recorded in §6.2. D6/D10 and the configurable local/DeepSeek runtime (D7) are proposed-locked in `docs/orchestration-and-cost.md`. Rubric-cache, tool-schema, and context-isolation constraints are in `docs/architecture.md` (not built this week). PDF library D8 is locked in `docs/pdf-library.md`.
 **Revision:** 7 Oct 2026 — phase 1 takes the single-story parts of `Story_Guard_Report_2_Banking.pdf` (Desktop). Story health follows that PDF’s highest-open-bug rule. Coverage is a separate table. The portfolio pages, the charts, and the coverage percentages stay later. The 29 Sep 2026 revision still stands: dummy story **121213** is recorded in §6.2. D6/D10 and the 8 GB local runtime (D7) are proposed-locked in `docs/orchestration-and-cost.md`. Rubric-cache, tool-schema, and context-isolation constraints are in `docs/architecture.md` (not built this week). PDF library stays open.  
 **Sprint window this pack covers:** Week 2 planning (25–28 Aug 2026) + close-out  
 **Repo:** https://github.com/Gugan-Ananth-A/story-guard-mvp  
@@ -10,7 +10,7 @@
 **Dummy-data rule:** no live team project, no production agent loop this pack.
 
 This document freezes the problem, users, phase-1 boundary, data sources, scorecard *intent*, generation gates, and phase map.  
-D6 (orchestrator), D10 (single pipeline), and the development runtime (D7: local model on an 8 GB Mac) are a **proposed lock** in `docs/orchestration-and-cost.md`. PDF library D8 is locked in `docs/pdf-library.md` (TBD-ARCH-2).
+D6 (orchestrator), D10 (single pipeline), and the development runtime (D7: local model on an 8 GB Mac or optional DeepSeek API) are a **proposed lock** in `docs/orchestration-and-cost.md`. PDF library D8 is locked in `docs/pdf-library.md` (TBD-ARCH-2).
 
 ---
 
@@ -70,11 +70,17 @@ How QA said they would use it (Tue walkthrough):
 | Gates | Hard checks must pass before a PDF is produced (bad ID, wrong type, broken contract → no PDF) |
 | Health model | Story health from the highest open bug, as in the banking PDF. Coverage is a separate table. Neither comes from model mood. |
 | Source shape | ADO Boards for story + bugs; tests/coverage behind a dummy adapter so the source can be swapped later |
-| Traceability | Explicit `mapped_ac` / linked TC IDs only. No LLM-guessed mapping as source of truth. |
+| Traceability | Live report links are model-checked against AC text and test evidence; source `mapped_ac` / linked TC IDs remain unmodified. |
 
 What phase 1 actually does:
 
 > Take a Story ID → assemble AC quality, test mapping, coverage types, and linked bugs → score them deterministically → wrap a short narrative around those facts → hand QA a shareable PDF.
+
+Live-analysis amendment (14 Oct 2026): AC quality and candidate AC↔test
+mapping are model-assisted. The model receives one AC and one bounded suite
+batch at a time, repeats across all suites, and returns quality plus candidate
+links. The scorer validates the returned test IDs and computes the final row
+status. The source record's `mapped_ac_ids` remains unchanged.
 
 ### 3.2 Out of phase 1 / later SaaS
 
@@ -102,7 +108,7 @@ Tighter than phase 1. This pack is documents + contracts + static mocks, not shi
 - No production-form agent loop (no parser → auditor → writer pipeline that “is the product”).
 - No live project connection. Dummy org / fixtures only. Never point code at a real delivery board.
 - No pixel-perfect PDF engine in the planning week. Static mock PDF or formatted doc that shows section order. Rendering library is a stack decision, not a design debate.
-- No model bake-off. Development default is **Qwen3.5 4B** via Ollama; fallback is **Phi-4 Mini**. Both fit an 8 GB Mac. Context loaded at 8,192. See `docs/orchestration-and-cost.md` §4.5.
+- No model bake-off. Development default is **Qwen3.5 4B** via Ollama; fallback is **Phi-4 Mini**. **DeepSeek** (`deepseek-flash`, changeable with `DEEPSEEK_MODEL` or `STORY_GUARD_MODEL`) is an optional API provider. Local runs fit an 8 GB Mac; context is loaded at 8,192. See `docs/orchestration-and-cost.md` §4.5.
 - No Azure Test Plans dependency. JSON / SQLite dummy store is the default.
 - No dual-track orchestrators. Proposed lock: **LangGraph** as a graph of code nodes, and **one** narrative LLM call. CrewAI, and a LangGraph supervisor over specialist models, are out of phase 1 (`docs/orchestration-and-cost.md`).
 - No scope leaks into Slack / Jira / dashboards / billing / mid-flow HITL.
@@ -118,12 +124,12 @@ Tighter than phase 1. This pack is documents + contracts + static mocks, not shi
 | Data | Dummy ADO story + bugs + dummy test pack | Live ADO, live Test Plans, any real team project |
 | HITL | QA review after the PDF exists | Approve-each-section, edit-in-place while the agent runs |
 | Scoring | Deterministic engine on fixture/adapter fields | Model-only “health vibe”, including an AI judgement of “partially covered” |
-| Mapping | Explicit links in dummy data | Embedding / LLM-guessed AC ↔ test mapping as truth |
+| Mapping | Model-checked AC ↔ test links in the live report; source links are preserved | Unvalidated semantic matches or mutation of source links |
 | Coverage numbers | Counts computed from `mapped_ac_ids` and test `type` | Invented by the model, including a coverage percentage the score does not contain |
 | Report | One story: bug health, AC coverage table, bug table, actions, raw-id appendix | Portfolio summary, multi-story overview, charts, average coverage % |
 | Operator | Local CLI / script QA can run | Multi-tenant SaaS |
 | Orchestration | LangGraph code-node graph; code scores; one narrative call | CrewAI crew, supervisor of specialist LLMs, a second orchestrator |
-| Narrative model (dev) | Local Ollama on an 8 GB Mac: Qwen3.5 4B, fallback Phi-4 Mini, context 8,192 | Hosted API, a 7B+ model, a second model loaded beside the writer |
+| Narrative model (dev) | Ollama by default: Qwen3.5 4B, fallback Phi-4 Mini, context 8,192; optional DeepSeek Chat API | A 7B+ local model or a second model loaded beside the writer |
 
 ---
 
@@ -222,7 +228,7 @@ Minimum records the dummy TMS + ADO adapters must be able to return (see also `f
 - **StoryRecord** — id, title, type, state, description, area, iteration, raw AC text, discrete AC list
 - **AcceptanceCriterion** — ac_id, text, testable flag, ambiguity flags
 - **TestCase** — id, title, type (happy / negative / edge / security / adhoc), mapped_ac_ids[], last_result, last_result_at, linked bug ids. The report prints `happy` as Positive, `negative` as Negative, and `adhoc` as Adhoc. `edge` and `security` stay on the record and in the appendix. They do not fill the three coverage-depth lines.
-- **CoverageSummary** — per scenario: mapped test ids, depth, gap, and row status (Adequate / Partial / None). Counts of those three statuses. Computed by the scorer from `mapped_ac_ids` and `type`, not by the LLM, and not stored as a coverage percentage.
+- **CoverageSummary** — per scenario: model-selected test ids, depth, gap, row status (Adequate / Partial / None), and AC-quality assessment. Counts of those statuses are computed by the scorer from the validated model result and test types; no coverage percentage is stored.
 - **BugRecord** — id, title, severity, priority (`P1`–`P4` when known), status, age, found-in env, linked story id, linked TC id, assigned_to, application, created. The last three may be empty. Empty prints blank. The scorer does not copy severity into priority.
 - **HealthReport** — story header, story health from §7.1, AC coverage table, bug table, narrative, recommended actions, appendix of raw IDs
 
@@ -230,12 +236,11 @@ Minimum records the dummy TMS + ADO adapters must be able to return (see also `f
 
 ### 6.4 Traceability rule (phase 1 law)
 
-A test covers an AC only if the link was set explicitly.
+A live report counts a test for an AC only after the model selects the test from the AC and test evidence and the scorer validates the returned test id. Source links are still preserved as source data.
 
-- Source of truth: `mapped_ac` / `mapped_ac_ids` / linked TC IDs written by a human or fixture author.
-- Never persist LLM-guessed or embedding/semantic matches as coverage.
-- A “this looks related” suggestion may be shown to a human. It must not populate the data used to score.
-- No explicit link means the AC is uncovered. A false “covered” is worse than a false “uncovered.”
+- The model receives no source `mapped_ac_ids` field in its live review prompt, so existing fixture links cannot anchor the decision.
+- Returned test ids are filtered to fetched tests; returned test classifications are used only for the current score and never written back to the source record.
+- Missing model links remain uncovered, and the report records the model status plus its agreement with the scorer's final status.
 
 **TBD-DATA-3** (Thabitha, after Vignesh review 28 Sep 2026): update the Google contract doc with the agreed mapping rule and point this pack at the repo copy.
 
@@ -454,7 +459,7 @@ Rules the architecture must obey:
 - Adapters first. The scorer and the narrative node do not speak raw ADO JSON. The narrative node receives the score object.
 - Coverage rows, story health, and `mapped_ac` come from code and explicit links. The model cites them. It does not change them, and it has no tools on this call.
 - One orchestrator. A specialist crew (parser, AC auditor, coverage analyst, bug correlator, writer) is out, including the same shape drawn as a LangGraph supervisor.
-- One LLM call per successful generate, against the local model in `docs/orchestration-and-cost.md` §4.5. The runner’s JSON mode constrains it. A schema failure retries that call once, then fails closed. A second call for a QA rewrite is later-phase HITL.
+- One LLM call per successful generate, against the configured provider in `docs/orchestration-and-cost.md` §4.5. The runner’s JSON mode constrains it. A schema failure retries that call once, then fails closed. A second call for a QA rewrite is later-phase HITL.
 - AC splitting is deterministic. Markdown-first so QA can diff; PDF is a render step.
 - Dev caps bind the build week: context loaded at 8,192, narrative target ≤ 4,096 tokens, hard stop at 8,192 tokens or 60 s of generation. Do not raise the context to fit a raw work-item blob.
 

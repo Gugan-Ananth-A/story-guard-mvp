@@ -1,0 +1,1305 @@
+"""Model-assisted live review of one story at a time.
+
+The live path deliberately keeps the model's context small: one acceptance
+criterion is compared with one bounded test-suite batch at a time. The batches
+are combined in code, then the deterministic scorer calculates the final AC
+status, coverage depth, and story health. Existing ``mapped_ac_ids`` values are
+not used as a shortcut for live analysis.
+"""
+
+import html
+import json
+import re
+import threading
+import time
+from collections.abc import Callable
+from pathlib import Path
+
+from story_guard.narrative import (
+    ATTEMPTS,
+    NarrativeError,
+    _check_cap,
+    _elapsed_ms,
+    _load_response_json,
+    _token_count,
+    name_story,
+    ollama_chat,
+    story_failure,
+)
+from story_guard.score import (
+    coverage_row,
+    is_closed_status,
+    open_bug_ids,
+    score_health,
+    scored_criteria,
+)
+
+_PAIR_PREDICT = 2048
+_PAIR_PREDICT_MIN = 512
+_SUITE_BATCH_CHARS = 12000
+_TEST_TEXT_CHARS = 1200
+_FINDING_CHARS = 400
+_QUALITY_ISSUE_CHARS = 240
+_ID_TOKEN = re.compile(r"\bAC-\d+\b|\b\d{5,}\b", re.IGNORECASE)
+_PRIORITY = re.compile(r"\bP([1-4])\b", re.IGNORECASE)
+_QUALITY_LEVELS = {"good", "needs_improvement", "poor"}
+_COVERAGE_STATUSES = {"adequate", "partial", "none"}
+_TEST_TYPES = {"happy", "negative", "edge", "security", "adhoc"}
+_KEPT_TYPES = {"happy", "negative", "adhoc"}
+_PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / "live_map_v1.md"
+_PROMPT = _PROMPT_PATH.read_text(encoding="utf-8")
+
+_NEGATIVE_HINT = re.compile(
+    r"\b(?:invalid|incorrect|unregistered|failed|empty|unauthorized|denied|rejected|error|forbidden|bad)\b"
+    r"|special characters|not exposed|session expir|should not|must not|security|injection",
+    re.IGNORECASE,
+)
+_ADHOC_HINT = re.compile(
+    r"\b(?:leading|trailing|whitespace|keyboard|browser|refresh|direct|length|edge|adhoc)\b"
+    r"|\bspaces?\b|\brepeat|screen size|\bback\b"
+    r"|\bclear(?:ed|ing)?\b|\bedit(?:ing|ed)?\b",
+    re.IGNORECASE,
+)
+_TYPE_RANK = {"negative": 3, "adhoc": 2, "happy": 1}
+_TITLE_PATH = re.compile(
+    r"(?<![A-Za-z0-9])([PNA])(\d{2})(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+_TITLE_KIND = {"P": "happy", "N": "negative", "A": "adhoc"}
+_FAILURE_CRITERION = re.compile(
+    r"\b(?:invalid|unregistered|incorrect|wrong|fails?|failed|error|rejected|denied)\b"
+    r"|must not|should not|stays? on",
+    re.IGNORECASE,
+)
+_CONTENT_WORD = re.compile(r"[a-z0-9]+")
+_TITLE_TAG = re.compile(r"\[[^\]]*\]")
+_STOP_WORDS = frozenset(
+    """
+    a an the and or of to for on in at by with from into over when where
+    while user users given then that this these those is are was be been
+    being it its their his her as not no nor but if click clicks clicked
+    enter enters entered verify verifies verified should must page screen
+    field button after before behavior correctly handled has says during
+    across again away back via using under functional reachable multiple
+    direct does doesn submit trigger
+    """.split()
+)
+
+Progress = Callable[[str], None]
+# One resident model. A second live-review call waits until the first returns.
+_MODEL_CALL = threading.Lock()
+
+
+def _notify(progress: Progress | None, message: str) -> None:
+    """Send CLI progress without allowing display code to affect analysis."""
+    if progress is None:
+        return
+    try:
+        progress(message)
+    except Exception:
+        # Progress is best-effort. A broken output stream must not change the
+        # model result or leave a partially generated report.
+        return
+
+
+def analyze_live(record: dict, progress: Progress | None = None) -> dict:
+    """Review every criterion against every test suite, then combine the results."""
+    try:
+        return _analyze_live(record, progress)
+    except NarrativeError as exc:
+        story_id = str(record.get("id") or "") if isinstance(record, dict) else ""
+        raise name_story(story_id, exc) from exc
+
+
+def _analyze_live(record: dict, progress: Progress | None = None) -> dict:
+    if not isinstance(record, dict):
+        raise NarrativeError("story record is not an object")
+    criteria = _criteria_to_judge(record)
+    suites = _test_suites(record)
+    if suites:
+        started = (
+            f"live review started: {len(criteria)} acceptance criteria "
+            f"across {len(suites)} suite batches"
+        )
+    else:
+        started = (
+            f"live review started: {len(criteria)} acceptance criteria "
+            "and no fetched tests"
+        )
+    _notify(progress, started)
+    reviews, findings, token_count, latency_ms = _judge_criteria(
+        record, criteria, 0, progress, suites
+    )
+    result = result_from_judgment(
+        record,
+        _combined_judgment(record, reviews, findings),
+        token_count=token_count,
+        narrative_latency_ms=latency_ms,
+    )
+    _notify(progress, "live review complete: model links checked and score calculated")
+    return result
+
+
+def _judge_criteria(
+    record: dict,
+    criteria: list[dict],
+    index: int,
+    progress: Progress | None = None,
+    suites: list[tuple[str, str, list[dict]]] | None = None,
+) -> tuple[list[dict], list[str], int, int]:
+    """Judge each criterion in sequence without growing the model context."""
+    reviews: list[dict] = []
+    findings: list[str] = []
+    tokens = 0
+    latency = 0
+    suites = suites if suites is not None else _test_suites(record)
+    for criterion in criteria[index:]:
+        review, criterion_findings, criterion_tokens, criterion_latency = _judge_suites(
+            record, criterion, suites, progress
+        )
+        reviews.append(review)
+        findings.extend(criterion_findings)
+        tokens += criterion_tokens
+        latency += criterion_latency
+        _notify(
+            progress,
+            f"completed {criterion.get('ac_id', 'AC')}: {len(review.get('mapped_test_ids') or [])} predicted test links",
+        )
+    return reviews, findings, tokens, latency
+
+
+def _judge_suites(
+    record: dict,
+    criterion: dict,
+    suites: list[tuple[str, str, list[dict]]],
+    progress: Progress | None = None,
+) -> tuple[dict, list[str], int, int]:
+    """Judge this criterion against every suite batch and merge the evidence."""
+    ac_id = str(criterion.get("ac_id") or "")
+    ids: list[str] = []
+    findings: list[str] = []
+    quality: dict | None = None
+    votes: dict[str, list[str]] = {}
+    tokens = 0
+    latency = 0
+    statuses: list[str] = []
+    passes = _review_passes(record, criterion, suites)
+    for batch_index, passed in enumerate(passes, 1):
+        (
+            suite_id,
+            suite_name,
+            ac_index,
+            ac_part,
+            ac_count,
+            desc_index,
+            desc_part,
+            desc_count,
+            tests,
+        ) = passed
+        _notify(
+            progress,
+            (
+                f"reviewing {ac_id} against {suite_name} "
+                f"({batch_index}/{len(passes)}, criterion part {ac_index + 1}/{ac_count}, "
+                f"description part {desc_index + 1}/{desc_count}, {len(tests)} tests)"
+            ),
+        )
+        pair, call_tokens, call_latency = _judge_pair(
+            record,
+            criterion,
+            suite_id,
+            suite_name,
+            tests,
+            ac_part,
+            ac_index,
+            ac_count,
+            desc_part,
+            desc_index,
+            desc_count,
+            progress,
+        )
+        for test_id in pair["mapped_test_ids"]:
+            if test_id not in ids:
+                ids.append(test_id)
+        if pair.get("finding"):
+            findings.append(str(pair["finding"]))
+        for test_id, test_type in (pair.get("test_types") or {}).items():
+            votes.setdefault(test_id, []).append(test_type)
+        pair_quality = pair.get("quality")
+        if isinstance(pair_quality, dict):
+            quality = (
+                pair_quality
+                if quality is None
+                else _merge_quality(quality, pair_quality)
+            )
+        status = str(pair.get("coverage_status") or "").strip().lower()
+        if status in _COVERAGE_STATUSES:
+            statuses.append(status)
+        tokens += call_tokens
+        latency += call_latency
+    if not findings:
+        findings = [_default_finding(ac_id, ids)]
+    test_types = {test_id: _chosen_type(kinds) for test_id, kinds in votes.items()}
+    _fill_missing_types(test_types, ids, record.get("tests") or [])
+    return (
+        {
+            "ac_id": ac_id,
+            "mapped_test_ids": ids,
+            "test_types": test_types,
+            "coverage_status": _combined_status(ids, statuses),
+            "quality": quality or _default_quality(criterion),
+        },
+        findings,
+        tokens,
+        latency,
+    )
+
+
+def _judge_pair(
+    record: dict,
+    criterion: dict,
+    suite_id: str,
+    suite_name: str,
+    tests: list[dict],
+    ac_part: str,
+    ac_index: int,
+    ac_count: int,
+    desc_part: str,
+    desc_index: int,
+    desc_count: int,
+    progress: Progress | None = None,
+) -> tuple[dict, int, int]:
+    """One model call. A rejected body is tried again until the attempt budget is spent."""
+    ac_id = str(criterion.get("ac_id") or "")
+    facts = _pair_facts(
+        record,
+        criterion,
+        suite_id,
+        suite_name,
+        tests,
+        ac_part,
+        ac_index,
+        ac_count,
+        desc_part,
+        desc_index,
+        desc_count,
+    )
+    budget = _PAIR_PREDICT
+    last_error: NarrativeError | None = None
+    correction: str | None = None
+    latency_ms = 0
+    for attempt in range(1, ATTEMPTS + 1):
+        messages = [
+            {"role": "system", "content": _PROMPT},
+            {"role": "user", "content": facts},
+        ]
+        if correction:
+            messages.append({"role": "user", "content": correction})
+        started = time.perf_counter()
+        try:
+            with _MODEL_CALL:
+                response = ollama_chat(messages, num_predict=budget)
+            _check_cap(response)
+            body = _load_response_json(response, "analysis")
+            pair = _require_pair(body, criterion, tests)
+        except NarrativeError as exc:
+            if story_failure(exc):
+                raise
+            latency_ms += _elapsed_ms(started)
+            last_error = exc
+            _notify(
+                progress,
+                f"{ac_id} / {suite_name}: retry {attempt}/{ATTEMPTS} ({exc})",
+            )
+            text = str(exc)
+            if "seconds of generation" in text or "exceeded 8192 tokens" in text:
+                budget = max(_PAIR_PREDICT_MIN, budget // 2)
+                correction = (
+                    "The previous answer was too long and was rejected. "
+                    "Return one JSON object with ac_id, mapped_test_ids, test_types, coverage_status, quality, and finding."
+                )
+            else:
+                correction = (
+                    "The previous JSON was rejected: "
+                    + text
+                    + " Judge this acceptance criterion against this suite batch again. "
+                    "Return one JSON object with ac_id, mapped_test_ids, test_types, coverage_status, quality, and finding."
+                )
+            continue
+        latency_ms += _elapsed_ms(started)
+        return pair, _token_count(response), latency_ms
+    raise NarrativeError(f"analysis failed after {ATTEMPTS} attempts: {last_error}")
+
+
+def result_from_judgment(
+    record: dict,
+    judgment: dict,
+    token_count: int = 0,
+    narrative_latency_ms: int = 0,
+) -> dict:
+    """Merge a model judgment onto the fetched story. Fetched counts are not replaced."""
+    score = _score_from_judgment(record, judgment)
+    return {
+        "score": score,
+        "narrative": _narrative(score, judgment),
+        "token_count": token_count,
+        "narrative_latency_ms": narrative_latency_ms,
+    }
+
+
+def _criteria_to_judge(record: dict) -> list[dict]:
+    """Acceptance criteria, plus description scenarios that state something new."""
+    chosen: list[dict] = []
+    seen: set[str] = set()
+    for item in scored_criteria(record):
+        if not isinstance(item, dict):
+            continue
+        ac_id = str(item.get("ac_id") or "")
+        if ac_id and ac_id not in seen:
+            chosen.append(item)
+            seen.add(ac_id)
+    for item in record.get("scenarios") or []:
+        if not isinstance(item, dict):
+            continue
+        ac_id = str(item.get("ac_id") or "")
+        text = str(item.get("text") or "")
+        if not ac_id or ac_id in seen or _already_stated(text, chosen):
+            continue
+        chosen.append(item)
+        seen.add(ac_id)
+    return chosen
+
+
+def _already_stated(text: str, chosen: list[dict]) -> bool:
+    """True when this description scenario repeats an acceptance criterion."""
+    needle = _norm_requirement(text)
+    if not needle:
+        return True
+    for item in chosen:
+        hay = _norm_requirement(str(item.get("text") or ""))
+        if hay and (needle == hay or needle in hay):
+            return True
+    return False
+
+
+def _norm_requirement(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", _plain_text(text).casefold()).strip()
+
+
+def _test_suites(record: dict) -> list[tuple[str, str, list[dict]]]:
+    """Tests grouped by suite, in the order the suites first appear."""
+    groups: dict[str, list[dict]] = {}
+    order: list[tuple[str, str]] = []
+    for test in record.get("tests") or []:
+        if not isinstance(test, dict):
+            continue
+        suite_id = str(test.get("suite_id") or "").strip()
+        suite_name = str(test.get("suite_name") or "").strip()
+        key = suite_id or suite_name or "tests"
+        name = suite_name or suite_id or "tests"
+        if key not in groups:
+            groups[key] = []
+            order.append((key, name))
+        groups[key].append(test)
+    return [(key, name, groups[key]) for key, name in order]
+
+def _text_parts(text: str, size: int = _TEST_TEXT_CHARS) -> list[str]:
+    """Split text into consecutive parts. Nothing is dropped."""
+    body = text.strip()
+    if not body:
+        return []
+    return [body[index:index + size] for index in range(0, len(body), size)]
+
+
+def _plain_text(value: object) -> str:
+    """Turn HTML from Azure DevOps into the text the model should read."""
+    if not isinstance(value, str):
+        return ""
+    text = html.unescape(value)
+    text = text.replace("\xa0", " ")
+    text = re.sub(r"(?i)<br\s*/?>", " ", text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _test_evidence(test: dict) -> str:
+    """Title, description, steps, and parameters. The full text, not a prefix."""
+    sections = []
+    title = _plain_text(test.get("title"))
+    if title:
+        sections.append(f"Title: {title}")
+    for label, key in (
+        ("Description", "description"),
+        ("Steps", "steps"),
+        ("Parameters", "parameters"),
+    ):
+        value = _plain_text(test.get(key))
+        if value:
+            sections.append(f"{label}: {value}")
+    return "\n".join(sections)
+
+
+def _test_part_rows(test: dict) -> list[dict]:
+    """One row per 1200-character part of this test's full text."""
+    evidence = _test_evidence(test)
+    parts = _text_parts(evidence) or [""]
+    total = len(parts)
+    rows = []
+    for index, part in enumerate(parts, 1):
+        rows.append(
+            {
+                "id": str(test.get("id") or ""),
+                "type": str(test.get("type") or ""),
+                "part": index,
+                "parts": total,
+                "text": part,
+            }
+        )
+    return rows
+
+
+def _pack_rows(rows: list[dict]) -> list[list[dict]]:
+    """Group part rows so one call stays within the suite batch budget."""
+    batches: list[list[dict]] = []
+    current: list[dict] = []
+    current_chars = 0
+    for row in rows:
+        size = len(str(row.get("text") or "")) + 80
+        if current and current_chars + size > _SUITE_BATCH_CHARS:
+            batches.append(current)
+            current = []
+            current_chars = 0
+        current.append(row)
+        current_chars += size
+    if current:
+        batches.append(current)
+    return batches
+
+
+def _review_passes(
+    record: dict,
+    criterion: dict,
+    suites: list[tuple[str, str, list[dict]]],
+) -> list[tuple]:
+    """Every criterion part, description part, and test part. Order is stable."""
+    ac_parts = _text_parts(_plain_text(criterion.get("text"))) or [""]
+    desc_parts = _text_parts(_plain_text(record.get("description"))) or [""]
+    passes = []
+    for suite_id, suite_name, tests in suites:
+        per_test = [_test_part_rows(test) for test in tests if isinstance(test, dict)]
+        if not per_test:
+            continue
+        max_rounds = max(len(rows) for rows in per_test)
+        batches: list[list[dict]] = []
+        for round_index in range(max_rounds):
+            rows = [parts[round_index] for parts in per_test if round_index < len(parts)]
+            batches.extend(_pack_rows(rows))
+        if not batches:
+            continue
+        for ac_index, ac_part in enumerate(ac_parts):
+            for desc_index, desc_part in enumerate(desc_parts):
+                for batch in batches:
+                    passes.append(
+                        (
+                            suite_id,
+                            suite_name,
+                            ac_index,
+                            ac_part,
+                            len(ac_parts),
+                            desc_index,
+                            desc_part,
+                            len(desc_parts),
+                            batch,
+                        )
+                    )
+    return passes
+
+
+def _pair_facts(
+    record: dict,
+    criterion: dict,
+    suite_id: str,
+    suite_name: str,
+    tests: list[dict],
+    ac_part: str,
+    ac_index: int,
+    ac_count: int,
+    desc_part: str,
+    desc_index: int,
+    desc_count: int,
+) -> str:
+    payload = {
+        "story_id": str(record.get("id") or ""),
+        "acceptance_criterion": {
+            "ac_id": str(criterion.get("ac_id") or ""),
+            "text": ac_part,
+            "part": ac_index + 1,
+            "parts": ac_count,
+        },
+        "suite": {"id": suite_id, "name": suite_name},
+        "tests": tests,
+    }
+    if desc_part:
+        payload["story_description"] = {
+            "text": desc_part,
+            "part": desc_index + 1,
+            "parts": desc_count,
+        }
+    return (
+        "Judge this one acceptance criterion against every test in this one suite batch. "
+        "Return one JSON object.\n"
+        + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    )
+
+
+def _kept_type(value: object) -> str:
+    """Map a model or source label onto happy, negative, or adhoc."""
+    text = str(value or "").strip().lower()
+    if text in {"happy", "positive"}:
+        return "happy"
+    if text in {"negative", "security"}:
+        return "negative"
+    if text in {"adhoc", "edge"}:
+        return "adhoc"
+    return ""
+
+
+def _chosen_type(votes: list[str]) -> str:
+    """Pick one path when parts of the same test disagree. A tie prefers negative."""
+    counts: dict[str, int] = {}
+    for vote in votes:
+        if vote:
+            counts[vote] = counts.get(vote, 0) + 1
+    if not counts:
+        return ""
+    best = max(counts.values())
+    tied = [kind for kind, count in counts.items() if count == best]
+    tied.sort(key=lambda kind: _TYPE_RANK.get(kind, 0), reverse=True)
+    return tied[0]
+
+
+def _fill_missing_types(types: dict[str, str], ids: list[str], tests: list) -> None:
+    """Give every mapped test a path. A missing model label is inferred from the text."""
+    by_id = {
+        str(test.get("id") or ""): test
+        for test in tests
+        if isinstance(test, dict)
+    }
+    for test_id in ids:
+        if types.get(test_id):
+            continue
+        test = by_id.get(test_id)
+        if not isinstance(test, dict):
+            continue
+        source = _kept_type(test.get("type"))
+        types[test_id] = source or _inferred_type(test)
+
+
+def _inferred_type(test: dict) -> str:
+    """Last resort when every part omitted a path label."""
+    titled = _title_path(str(test.get("title") or ""))
+    if titled:
+        return titled
+    body = _test_evidence(test)
+    if _NEGATIVE_HINT.search(body):
+        return "negative"
+    if _ADHOC_HINT.search(body):
+        return "adhoc"
+    return "happy"
+
+
+def _title_path(title: str) -> str:
+    """Read a title token such as -P01, -N04, or -A06. P3 is a priority, not a path."""
+    match = _TITLE_PATH.search(title)
+    if match is None:
+        return ""
+    return _TITLE_KIND.get(match.group(1).upper(), "")
+
+
+def _expects_failure(text: str) -> bool:
+    return _FAILURE_CRITERION.search(text) is not None
+
+
+def _content_words(text: str) -> set[str]:
+    plain = _TITLE_TAG.sub(" ", text.lower())
+    plain = _TITLE_PATH.sub(" ", plain)
+    return {
+        word
+        for word in _CONTENT_WORD.findall(plain)
+        if len(word) > 2 and word not in _STOP_WORDS
+    }
+
+
+def _word_counts(tests: list[dict]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for test in tests:
+        if not isinstance(test, dict):
+            continue
+        for word in _content_words(_test_evidence(test)):
+            counts[word] = counts.get(word, 0) + 1
+    return counts
+
+
+def _distinctive(words: set[str], counts: dict[str, int], suite_size: int) -> set[str]:
+    """A word used by half the suite or more does not identify one behavior.
+
+    A word that appears once or twice is still distinctive in a small suite.
+    """
+    return {
+        word
+        for word in words
+        if counts.get(word, 0) <= 2 or counts.get(word, 0) * 2 < suite_size
+    }
+
+
+def _include_behavior_variants(
+    criterion: dict,
+    ids: list[str],
+    tests: list[dict],
+) -> list[str]:
+    """Add negative and adhoc cases of a behavior the model already accepted.
+
+    A title token N or A is required. The case must share a distinctive word
+    with the criterion or with a test already linked to it. A generic word
+    that appears across the suite does not qualify.
+    """
+    if not ids:
+        return ids
+    counts = _word_counts(tests)
+    suite_size = len([test for test in tests if isinstance(test, dict)])
+    by_id = {
+        str(test.get("id") or ""): test
+        for test in tests
+        if isinstance(test, dict)
+    }
+    seed = _distinctive(_content_words(str(criterion.get("text") or "")), counts, suite_size)
+    for test_id in ids:
+        test = by_id.get(test_id)
+        if isinstance(test, dict):
+            seed |= _distinctive(_content_words(_test_evidence(test)), counts, suite_size)
+    if not seed:
+        return ids
+    found = list(ids)
+    seen = set(ids)
+    for test in tests:
+        if not isinstance(test, dict):
+            continue
+        test_id = str(test.get("id") or "")
+        if test_id in seen or _title_path(str(test.get("title") or "")) not in {"negative", "adhoc"}:
+            continue
+        words = _distinctive(_content_words(_test_evidence(test)), counts, suite_size)
+        if words & seed:
+            seen.add(test_id)
+            found.append(test_id)
+    return found
+
+
+def _paths_for_criterion(
+    criterion: dict,
+    ids: list[str],
+    tests: list[dict],
+    model_types: dict[str, str],
+) -> dict[str, str]:
+    """Title token wins. A failure criterion keeps one proving case Positive."""
+    by_id = {
+        str(test.get("id") or ""): test
+        for test in tests
+        if isinstance(test, dict)
+    }
+    paths: dict[str, str] = {}
+    for test_id in ids:
+        test = by_id.get(test_id, {})
+        titled = _title_path(str(test.get("title") or ""))
+        if titled:
+            paths[test_id] = titled
+            continue
+        chosen = _kept_type(model_types.get(test_id))
+        paths[test_id] = chosen or _inferred_type(test if isinstance(test, dict) else {})
+    _promote_failure_proof(criterion, ids, tests, paths)
+    return paths
+
+
+def _promote_failure_proof(
+    criterion: dict,
+    ids: list[str],
+    tests: list[dict],
+    paths: dict[str, str],
+) -> None:
+    """One case that proves a failure result is Positive. Another failure case stays Negative."""
+    if not _expects_failure(str(criterion.get("text") or "")):
+        return
+    if any(paths.get(test_id) == "happy" for test_id in ids):
+        return
+    negatives = [test_id for test_id in ids if paths.get(test_id) == "negative"]
+    if len(negatives) < 2:
+        return
+    counts = _word_counts(tests)
+    suite_size = len([test for test in tests if isinstance(test, dict)])
+    wanted = _distinctive(_content_words(str(criterion.get("text") or "")), counts, suite_size)
+    by_id = {
+        str(test.get("id") or ""): test
+        for test in tests
+        if isinstance(test, dict)
+    }
+
+    def rank(test_id: str) -> tuple[int, str]:
+        test = by_id.get(test_id, {})
+        words = _distinctive(
+            _content_words(_test_evidence(test if isinstance(test, dict) else {})),
+            counts,
+            suite_size,
+        )
+        return (-len(words & wanted), test_id)
+
+    paths[min(negatives, key=rank)] = "happy"
+
+
+def _require_pair(body: dict, criterion: dict, tests: list[dict]) -> dict:
+    ac_id = str(criterion.get("ac_id") or "")
+    if not isinstance(body, dict):
+        raise NarrativeError("analysis is not an object")
+    got = str(body.get("ac_id") or "").strip()
+    if got and got != ac_id:
+        raise NarrativeError(f"analysis ac_id {got} does not match {ac_id}")
+    named = body.get("mapped_test_ids")
+    if not isinstance(named, list):
+        raise NarrativeError("analysis JSON misses mapped_test_ids")
+    known = {str(test.get("id") or "") for test in tests}
+    ids = []
+    for item in named:
+        key = str(item)
+        if key in known and key not in ids:
+            ids.append(key)
+    test_types: dict[str, str] = {}
+    raw_types = body.get("test_types")
+    if isinstance(raw_types, dict):
+        for raw_id, raw_type in raw_types.items():
+            test_id = str(raw_id)
+            test_type = _kept_type(raw_type)
+            if test_id in ids and test_type:
+                test_types[test_id] = test_type
+    coverage_status = str(body.get("coverage_status") or "").strip().lower().replace(" ", "_")
+    if coverage_status not in _COVERAGE_STATUSES:
+        coverage_status = _fallback_status(ids, tests)
+    quality = _quality_from_body(body.get("quality"), criterion)
+    finding = body.get("finding")
+    if not isinstance(finding, str) or not finding.strip():
+        finding = _default_finding(ac_id, ids)
+    else:
+        finding = _safe_finding(finding, ac_id, ids)
+    return {
+        "ac_id": ac_id,
+        "mapped_test_ids": ids,
+        "test_types": test_types,
+        "coverage_status": coverage_status,
+        "quality": quality,
+        "finding": finding,
+    }
+
+
+def _fallback_status(ids: list[str], tests: list[dict]) -> str:
+    """Derive a safe fallback when a small model omits its status field."""
+    if not ids:
+        return "none"
+    titles = {str(test.get("id") or "") for test in tests}
+    return "partial" if any(test_id in titles for test_id in ids) else "none"
+
+
+def _default_quality(criterion: dict) -> dict:
+    """Conservative quality baseline used only when no valid model quality exists."""
+    text = str(criterion.get("text") or "").strip()
+    if not text:
+        return {
+            "status": "poor",
+            "testable": False,
+            "issues": ["The acceptance criterion has no text."],
+        }
+    lowered = text.casefold()
+    expected_markers = (
+        " should ",
+        " must ",
+        " remains",
+        " stays ",
+        " is ",
+        " are ",
+        " displays",
+        " shows",
+        " redirected",
+        " error",
+    )
+    if any(marker in f" {lowered} " for marker in expected_markers):
+        return {"status": "good", "testable": True, "issues": []}
+    return {
+        "status": "needs_improvement",
+        "testable": True,
+        "issues": ["The expected result is not explicit."],
+    }
+
+
+def _quality_from_body(value: object, criterion: dict) -> dict:
+    fallback = _default_quality(criterion)
+    if not isinstance(value, dict):
+        return fallback
+    status = str(value.get("status") or "").strip().lower().replace(" ", "_").replace("-", "_")
+    if status not in _QUALITY_LEVELS:
+        return fallback
+    testable = value.get("testable")
+    if not isinstance(testable, bool):
+        testable = status != "poor"
+    raw_issues = value.get("issues")
+    issues: list[str] = []
+    if isinstance(raw_issues, list):
+        for item in raw_issues:
+            if not isinstance(item, str) or not item.strip():
+                continue
+            issue = " ".join(item.split())[:_QUALITY_ISSUE_CHARS].rstrip()
+            if issue and issue not in issues:
+                issues.append(issue)
+    if status == "good":
+        issues = []
+    return {"status": status, "testable": testable, "issues": issues}
+
+
+def _merge_quality(left: dict, right: dict) -> dict:
+    """Keep the strictest quality result across batches and deduplicate issues."""
+    rank = {"good": 0, "needs_improvement": 1, "poor": 2}
+    left_status = str(left.get("status") or "needs_improvement")
+    right_status = str(right.get("status") or "needs_improvement")
+    status = right_status if rank.get(right_status, 1) > rank.get(left_status, 1) else left_status
+    issues: list[str] = []
+    for source in (left, right):
+        for issue in source.get("issues") or []:
+            if isinstance(issue, str) and issue not in issues:
+                issues.append(issue)
+    return {
+        "status": status,
+        "testable": bool(left.get("testable", True) and right.get("testable", True)),
+        "issues": issues[:4],
+    }
+
+
+def _combined_status(ids: list[str], statuses: list[str]) -> str:
+    """Use the model's batch claims as a check, but make final status evidence-based."""
+    if not ids:
+        return "none"
+    if statuses and all(status == "adequate" for status in statuses):
+        return "adequate"
+    if any(status in {"adequate", "partial"} for status in statuses):
+        return "partial"
+    return "partial"
+
+
+def _default_finding(ac_id: str, ids: list[str]) -> str:
+    if not ids:
+        return f"No listed test checks {ac_id}."
+    return f"{ac_id} is checked by " + ", ".join(ids) + "."
+
+
+def _safe_finding(finding: str, ac_id: str, ids: list[str]) -> str:
+    text = " ".join(finding.split())
+    if len(text) > _FINDING_CHARS:
+        text = text[:_FINDING_CHARS].rstrip()
+    if "%" in text or "partially covered" in text.casefold():
+        return _default_finding(ac_id, ids)
+    known = {ac_id, *ids}
+    for token in _ID_TOKEN.findall(text):
+        if token.upper().startswith("AC-"):
+            if token.upper() != ac_id.upper():
+                return _default_finding(ac_id, ids)
+        elif token not in known:
+            return _default_finding(ac_id, ids)
+    return text
+
+
+def _combined_judgment(record: dict, reviews: list[dict], findings: list[str]) -> dict:
+    """Health and the headline come from the full record. Reviews are the per-criterion scores."""
+    decided = score_health(record)
+    return {
+        "headline": _headline(record),
+        "health": str(decided.get("health") or ""),
+        "analysis": _combined_analysis(record, findings),
+        "reviews": reviews,
+    }
+
+
+def _headline(record: dict) -> str:
+    bugs = _open_bugs(record)
+    if not bugs:
+        return "No open bugs."
+    best = min(_priority_rank(bug) for bug in bugs)
+    top = [bug for bug in bugs if _priority_rank(bug) == best]
+    label = f"P{best}" if best <= 4 else "unset priority"
+    parts = []
+    for bug in top:
+        bug_id = str(bug.get("id") or "")
+        title = str(bug.get("title") or "").strip()
+        if bug_id and title:
+            parts.append(f"{bug_id}: {title}")
+        elif bug_id or title:
+            parts.append(bug_id or title)
+    if len(parts) == 1:
+        return f"Open {label} bug {parts[0]}."
+    if parts:
+        return f"Open {label} bugs " + "; ".join(parts) + "."
+    return f"Open {label} bug."
+
+
+def _combined_analysis(record: dict, findings: list[str]) -> str:
+    parts = _bug_sentences(record) + [item for item in findings if item.strip()]
+    if not parts:
+        parts.append("No open bug sets health.")
+    return " ".join(parts)
+
+
+def _bug_sentences(record: dict) -> list[str]:
+    sentences = []
+    for bug in record.get("bugs") or []:
+        if not isinstance(bug, dict):
+            continue
+        bug_id = str(bug.get("id") or "")
+        title = str(bug.get("title") or "").strip()
+        if is_closed_status(bug.get("status")):
+            if bug_id:
+                sentences.append(f"Bug {bug_id} is closed and does not set health.")
+            continue
+        priority = str(bug.get("priority") or "").strip() or "unset priority"
+        text = f"Open bug {bug_id} ({priority}) remains" if bug_id else f"Open bug ({priority}) remains"
+        if title:
+            text += f": {title}"
+        sentences.append(text + ".")
+    return sentences
+
+
+def _bug_detail_lines(bug: dict) -> list[str]:
+    """Full bug description and repro steps, in 1200-character parts."""
+    bug_id = str(bug.get("id") or "")
+    lines = []
+    sections = (
+        ("description", bug.get("description")),
+        ("repro steps", bug.get("repro_steps")),
+    )
+    for label, raw in sections:
+        parts = _text_parts(_plain_text(raw))
+        total = len(parts)
+        for index, part in enumerate(parts, 1):
+            prefix = f"Bug {bug_id} {label}" if bug_id else f"Bug {label}"
+            if total > 1:
+                prefix += f" part {index} of {total}"
+            lines.append(f"{prefix}: {part}")
+    return lines
+
+
+def _open_bugs(record: dict) -> list[dict]:
+    return [
+        bug
+        for bug in record.get("bugs") or []
+        if isinstance(bug, dict) and not is_closed_status(bug.get("status"))
+    ]
+
+
+def _priority_rank(bug: dict) -> int:
+    match = _PRIORITY.search(str(bug.get("priority") or ""))
+    if not match:
+        return 9
+    return int(match.group(1))
+
+
+def _score_from_judgment(record: dict, judgment: dict) -> dict:
+    known_tests = set()
+    for test in record.get("tests") or []:
+        if isinstance(test, dict):
+            known_tests.add(str(test.get("id") or ""))
+    factual = score_health(record)
+    # SR-2 health comes from the open bugs. A model health label is not copied.
+    health = factual["health"]
+    health_band = factual["health_band"]
+    reviews = _reviews_by_id(judgment.get("reviews"), known_tests)
+    fetched = [test for test in record.get("tests") or [] if isinstance(test, dict)]
+    for criterion in _criteria_to_judge(record):
+        if not isinstance(criterion, dict):
+            continue
+        review = reviews.get(str(criterion.get("ac_id") or ""))
+        if not isinstance(review, dict):
+            continue
+        ids = _include_behavior_variants(
+            criterion,
+            list(review.get("mapped_test_ids") or []),
+            fetched,
+        )
+        review["mapped_test_ids"] = ids
+        review["test_types"] = _paths_for_criterion(
+            criterion,
+            ids,
+            fetched,
+            review.get("test_types") or {},
+        )
+    scored_tests = _tests_with_predicted_types(record, reviews)
+    factual["coverage_by_type"] = _coverage_by_type(scored_tests)
+    rows = []
+    for criterion in _criteria_to_judge(record):
+        if not isinstance(criterion, dict):
+            continue
+        ac_id = str(criterion.get("ac_id") or "")
+        review = reviews.get(ac_id)
+        ids = list(review.get("mapped_test_ids") or []) if isinstance(review, dict) else []
+        row = coverage_row(
+            ac_id,
+            ids,
+            scored_tests,
+            str(criterion.get("text") or ""),
+            types_by_test=review.get("test_types") if isinstance(review, dict) else None,
+        )
+        if isinstance(review, dict):
+            row["model_coverage_status"] = str(review.get("coverage_status") or "")
+            row["model_status_agrees"] = (
+                row["row_status"] == row["model_coverage_status"]
+                if row["model_coverage_status"] in _COVERAGE_STATUSES
+                else None
+            )
+            row["ac_quality"] = _quality_from_body(review.get("quality"), criterion)
+        else:
+            row["model_coverage_status"] = ""
+            row["model_status_agrees"] = None
+            row["ac_quality"] = _default_quality(criterion)
+        rows.append(row)
+    factual["scenarios"] = rows
+    factual["scenario_count"] = len(rows)
+    factual["adequate_count"] = sum(1 for row in rows if row["row_status"] == "adequate")
+    factual["partial_count"] = sum(1 for row in rows if row["row_status"] == "partial")
+    factual["none_count"] = sum(1 for row in rows if row["row_status"] == "none")
+    factual["mapped_count"] = sum(len(row["mapped_test_ids"]) for row in rows)
+    factual["rag"] = _rag(rows)
+    factual["quality_good_count"] = sum(
+        1 for row in rows if row.get("ac_quality", {}).get("status") == "good"
+    )
+    factual["quality_needs_review_count"] = sum(
+        1
+        for row in rows
+        if row.get("ac_quality", {}).get("status") in {"needs_improvement", "poor"}
+    )
+    factual["health"] = health
+    factual["health_band"] = health_band
+    factual.pop("test_coverage_percent", None)
+    return factual
+
+
+def _reviews_by_id(reviews: object, known_tests: set[str]) -> dict[str, dict]:
+    found = {}
+    if not isinstance(reviews, list):
+        return found
+    for review in reviews:
+        if not isinstance(review, dict):
+            continue
+        ac_id = str(review.get("ac_id") or "").strip()
+        if ac_id == "" or ac_id in found:
+            continue
+        named = review.get("mapped_test_ids")
+        ids = []
+        if isinstance(named, list):
+            for item in named:
+                key = str(item)
+                if key in known_tests and key not in ids:
+                    ids.append(key)
+        test_types: dict[str, str] = {}
+        raw_types = review.get("test_types")
+        if isinstance(raw_types, dict):
+            for raw_id, raw_type in raw_types.items():
+                test_id = str(raw_id)
+                test_type = _kept_type(raw_type)
+                if test_id in ids and test_type:
+                    test_types[test_id] = test_type
+        found[ac_id] = {
+            **review,
+            "mapped_test_ids": ids,
+            "test_types": test_types,
+        }
+    return found
+
+
+def _tests_with_predicted_types(record: dict, reviews: dict[str, dict]) -> list[dict]:
+    """Apply only model classifications for tests whose source type is empty."""
+    predicted: dict[str, str] = {}
+    for review in reviews.values():
+        mapped = {str(test_id) for test_id in review.get("mapped_test_ids") or []}
+        for test_id, test_type in (review.get("test_types") or {}).items():
+            if test_id not in mapped:
+                continue
+            if test_id not in predicted:
+                predicted[test_id] = test_type
+    tests: list[dict] = []
+    for test in record.get("tests") or []:
+        if not isinstance(test, dict):
+            continue
+        row = dict(test)
+        if not str(row.get("type") or "").strip():
+            test_type = _title_path(str(row.get("title") or "")) or predicted.get(
+                str(row.get("id") or "")
+            )
+            if test_type in _KEPT_TYPES:
+                row["type"] = test_type
+        tests.append(row)
+    return tests
+
+
+def _coverage_by_type(tests: list[dict]) -> dict[str, int]:
+    counts = {
+        "happy": 0,
+        "negative": 0,
+        "edge": 0,
+        "security": 0,
+        "adhoc": 0,
+        "unset": 0,
+    }
+    for test in tests:
+        kind = str(test.get("type") or "").strip().lower()
+        if kind == "positive":
+            kind = "happy"
+        if kind in counts and kind != "unset":
+            counts[kind] += 1
+        else:
+            counts["unset"] += 1
+    return counts
+
+
+def _rag(rows: list[dict]) -> str:
+    if not rows:
+        return "Unavailable"
+    if all(row["row_status"] == "none" for row in rows):
+        return "Red"
+    if any(row["row_status"] != "adequate" for row in rows):
+        return "Amber"
+    return "Green"
+
+
+def _narrative(score: dict, judgment: dict) -> dict:
+    health = score.get("health")
+    observations = [
+        f"Story health - {health}",
+        (
+            f"{score.get('scenario_count')} acceptance criteria, "
+            f"{score.get('adequate_count')} adequately covered, "
+            f"{score.get('partial_count')} with gaps, "
+            f"{score.get('none_count')} not covered."
+        ),
+        f"{score.get('test_count')} tests and {score.get('mapped_count')} mapped.",
+        f"{score.get('bug_count')} bugs, with {score.get('open_bug_count')} open.",
+    ]
+    p1_ids = open_bug_ids(list(score.get("bugs") or []), "P1")
+    if p1_ids:
+        observations.append("Open P1 bugs: " + ", ".join(p1_ids) + ".")
+    gapped = [
+        str(row.get("ac_id") or "")
+        for row in score.get("scenarios") or []
+        if isinstance(row, dict) and row.get("row_status") in ("partial", "none") and row.get("ac_id")
+    ]
+    if gapped:
+        observations.append("Criteria with gaps: " + ", ".join(gapped) + ".")
+    quality_gaps = [
+        str(row.get("ac_id") or "")
+        for row in score.get("scenarios") or []
+        if isinstance(row, dict)
+        and isinstance(row.get("ac_quality"), dict)
+        and row["ac_quality"].get("status") in {"needs_improvement", "poor"}
+        and row.get("ac_id")
+    ]
+    if quality_gaps:
+        observations.append("Criteria needing AC-quality review: " + ", ".join(quality_gaps) + ".")
+    for bug in score.get("bugs") or []:
+        if isinstance(bug, dict):
+            observations.extend(_bug_detail_lines(bug))
+    sections = []
+    analysis = judgment.get("analysis")
+    if isinstance(analysis, str) and analysis.strip():
+        text = _analysis_text(analysis, score)
+        if text:
+            observations.extend(_sentences(text))
+            sections.append({"name": "Analysis", "prose": text})
+    coverage = []
+    for row in score.get("scenarios") or []:
+        if isinstance(row, dict):
+            coverage.append(f"{row.get('ac_id')}: {row.get('row_status')}. {row.get('gap')}")
+    if coverage:
+        sections.append({"name": "Coverage", "prose": " ".join(coverage)})
+    return {
+        "headline": str(judgment.get("headline") or "").strip(),
+        "observations": observations,
+        "sections": sections,
+        "actions": _actions_from_score(score),
+    }
+
+
+def _actions_from_score(score: dict) -> list[dict]:
+    """One Dev action per open bug, and one QA action per criterion that is not adequate."""
+    actions = []
+    for bug in score.get("bugs") or []:
+        if not isinstance(bug, dict) or is_closed_status(bug.get("status")):
+            continue
+        bug_id = str(bug.get("id") or "")
+        if not bug_id:
+            continue
+        title = str(bug.get("title") or "").strip()
+        text = f"Fix open bug {bug_id}"
+        if title:
+            text += f": {title}"
+        actions.append({"owner": "Dev", "text": text + "."})
+    for row in score.get("scenarios") or []:
+        if not isinstance(row, dict) or row.get("row_status") not in ("partial", "none"):
+            continue
+        ac_id = str(row.get("ac_id") or "")
+        if not ac_id:
+            continue
+        gap = str(row.get("gap") or "").replace("\n", "; ")
+        actions.append({"owner": "QA", "text": f"Close the coverage gap on {ac_id}. {gap}."})
+    for row in score.get("scenarios") or []:
+        if not isinstance(row, dict):
+            continue
+        quality = row.get("ac_quality")
+        if not isinstance(quality, dict) or quality.get("status") not in {"needs_improvement", "poor"}:
+            continue
+        ac_id = str(row.get("ac_id") or "")
+        if not ac_id:
+            continue
+        issues = "; ".join(str(item) for item in quality.get("issues") or [] if str(item).strip())
+        text = f"Improve the quality of {ac_id} before using it as a test oracle"
+        if issues:
+            text += f": {issues}"
+        actions.append({"owner": "PO", "text": text + "."})
+    if not actions:
+        actions.append(
+            {
+                "owner": "QA",
+                "text": (
+                    "No open bugs and every acceptance criterion has "
+                    "positive, negative, and adhoc coverage."
+                ),
+            }
+        )
+    return actions
+
+
+def _analysis_text(analysis: str, score: dict) -> str:
+    """Keep the model's sentences when every id they name is on the score."""
+    text = analysis.strip()
+    known = {str(score.get("story_id") or "")}
+    for bug in score.get("bugs") or []:
+        if isinstance(bug, dict):
+            known.add(str(bug.get("id") or ""))
+    for row in score.get("scenarios") or []:
+        if not isinstance(row, dict):
+            continue
+        known.add(str(row.get("ac_id") or ""))
+        for test_id in row.get("mapped_test_ids") or []:
+            known.add(str(test_id))
+    for token in _ID_TOKEN.findall(text):
+        if token.upper().startswith("AC-"):
+            if token.upper() not in {item.upper() for item in known}:
+                return ""
+        elif token not in known:
+            return ""
+    return text
+
+
+def _sentences(text: str) -> list[str]:
+    """One observation bullet per sentence, so a long analysis stays readable."""
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    return [part.strip() for part in parts if part.strip()]

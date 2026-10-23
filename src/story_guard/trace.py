@@ -26,6 +26,18 @@ def record_success(story_id: str, token_count: int, narrative_latency_ms: int) -
     _maybe_trace(line)
 
 
+def record_batch(requested: list[str], written: list[str], skipped: list[str]) -> None:
+    """Append one batch line. It is not sent to LangSmith."""
+    _append_jsonl(
+        runs_path(),
+        {
+            "requested": list(requested),
+            "written": list(written),
+            "skipped": list(skipped),
+        },
+    )
+
+
 def runs_path() -> Path:
     from story_guard.graph import artifacts_dir
 

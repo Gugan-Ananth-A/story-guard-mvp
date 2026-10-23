@@ -5,6 +5,7 @@ Write one story-health report from the score object supplied in the next message
 The model may:
 - write a concise headline
 - write short section prose that cites the score's counts and labels
+- write the key observations that the report prints beside the portfolio summary
 - phrase 3 to 7 recommended actions using owner roles QA, Dev, or PO
 
 The model may not:
@@ -13,7 +14,18 @@ The model may not:
 - populate mapped_ac or mapped_ac_ids
 - infer coverage from titles, prose, semantic similarity, or missing fields
 - invent coverage or emit a coverage percentage that is absent from the score
+- use a percent sign
 - use the phrase "partially covered"
+- say that an acceptance criterion is covered when mapped_count is zero
+- say that a scenario type is covered when every row_status is none
+- call the story health Red, Amber, or Green. Those words belong only to the score's RAG, and only when you name it as RAG. Coverage does not change story health.
+
+Key observations are four or five sentences. Use this shape, substituting the score's own labels and counts and no others:
+- "Story health - <health>"
+- "<scenario_count> acceptance criteria, <adequate_count> adequately covered, <partial_count> with gaps, <none_count> not covered."
+- "<test_count> tests and <mapped_count> mapped."
+- "<bug_count> bugs, with <open_bug_count> open."
+A fifth sentence is allowed only for a fact already written in the score, such as the note. Do not turn that note into a mapping.
 
 Traceability rules:
 - A test covers an acceptance criterion only when the score records an explicit mapped_ac or mapped_ac_ids link.
@@ -26,9 +38,15 @@ Return one JSON object only. Do not use a Markdown fence or call tools. Conform 
 ```json
 {
   "type": "object",
-  "required": ["headline", "sections", "actions"],
+  "required": ["headline", "observations", "sections", "actions"],
   "properties": {
     "headline": {"type": "string"},
+    "observations": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 5,
+      "items": {"type": "string"}
+    },
     "sections": {
       "type": "array",
       "items": {

@@ -1,10 +1,19 @@
 # D6 / D10 — Orchestration decision and cost constraints
 
 **Status:** Proposed lock (Gugan, tie-break) — 29 Sep 2026  
-**Decisions:** D6 (orchestrator), D10 (single vs multi-agent), D7 development runtime (local model on an 8 GB Mac)  
+**Decisions:** D6 (orchestrator), D10 (single vs multi-agent), D7 development runtime (local model or optional DeepSeek API)
 **Risk owned here:** R4 (multi-agent token blow-up)  
 **Companion:** `docs/requirements.md` §11 and TBD-ARCH-1 / TBD-ARCH-3  
 **Reversible:** yes, if a build-week spike proves a specialist crew earns its tokens on the five fixtures. Default does not change without that evidence.
+
+**Implementation amendment (14 Oct 2026):** live analysis is still one
+single-model pipeline, but the model is now called once per acceptance
+criterion and bounded test-suite batch. It predicts the candidate test links
+and evaluates AC quality; Python merges those results and computes the final
+coverage status, depth, and bug-based health. The offline fixture path keeps
+the one narrative call. Ollama remains the default provider, while DeepSeek can be
+selected through environment configuration. Source `mapped_ac_ids` values are not used as a live
+shortcut and are never overwritten.
 
 ---
 
@@ -12,9 +21,9 @@
 
 | ID | Question | Choice | Why in one line |
 | --- | --- | --- | --- |
-| **D10** | Single agent vs multi-agent crew | **Single pipeline.** Deterministic code does the scoring. **One** LLM writes narrative around those facts. | Phase 1 is assemble-and-explain, not breadth-first research. A crew pays 3–15× tokens and adds handoff loss for work the scorecard already specifies. |
+| **D10** | Single agent vs multi-agent crew | **Single pipeline.** One local model reviews each AC against bounded suite batches; deterministic code combines and scores the results, then writes the report. | Phase 1 is bounded per-AC analysis, not a specialist crew. A crew pays 3–15× tokens and adds handoff loss. |
 | **D6** | Orchestrator | **LangGraph** as a *workflow graph of code nodes*, not as a supervisor of specialist LLMs. | Durable state, later HITL interrupts, traces. CrewAI is rejected for phase 1 because its native unit is a role-crew. |
-| **D7 dev** | Where the one narrative call runs during development | **Local model on an 8 GB Mac.** Ollama. Default Qwen3.5 4B, fallback Phi-4 Mini. Context loaded at 8,192. | That is the whole RAM budget once macOS and the editor are open. A hosted model, or a 7B+ checkpoint, is not the dev default. §4.5. |
+| **D7 dev** | Where live AC reviews run during development | **Configurable provider.** Ollama/Qwen3.5 4B is the default; DeepSeek API is an opt-in hosted provider. | Local runs need no API key; DeepSeek avoids local model memory limits when selected. §4.5. |
 
 **What we will build**
 
@@ -29,8 +38,8 @@ generate --story-id XXX
         ├─ fetch_tests         dummy TMS adapter
         ├─ fetch_bugs          ADO relations / dummy
         ├─ validate_contract   schema check, no model
-        ├─ score_health        H1–H11 in code, no model
-        ├─ write_narrative     ONE structured LLM call over the score object
+        ├─ score_health        model-assisted AC reviews + deterministic scoring
+        ├─ write_narrative     offline: one call; live: reuse combined review
         └─ render_pdf          markdown template → PDF
         │
         ▼
@@ -40,9 +49,9 @@ generate --story-id XXX
 **What we will not build in phase 1**
 
 - A CrewAI (or LangGraph-supervisor) crew of parser / AC auditor / coverage analyst / bug correlator / report writer, each with its own prompt and context.
-- An LLM that invents coverage percentages, test lists, or AC↔test maps.
+- An LLM that invents coverage percentages or unvalidated test ids; live links must be filtered and scored.
 - A second orchestrator “just in case.”
-- A hosted narrative model, or a second model resident beside the writer, on the development Mac.
+- A second model resident beside the writer on the development Mac. A hosted provider is an explicit configuration choice, not a second resident model.
 
 ---
 
@@ -54,9 +63,9 @@ The Thursday prompt mapped cleanly onto a crew:
 | --- | --- | --- |
 | Parser | Turn ADO / fixture JSON into `StoryRecord` | Adapter (code) |
 | AC auditor | Present / testable / ambiguous | Scorer (code + flags on the fixture) |
-| Coverage analyst | Mapped vs gap, by type | Scorer (explicit `mapped_ac_ids` only) |
+| Coverage analyst | Candidate links, test types, gaps | Per-AC model review + deterministic scorer |
 | Bug correlator | Open / severity / age | Scorer (code) |
-| Report writer | Headline, narrative, actions | **LLM, once**, over the score object |
+| Report writer | Headline, narrative, actions | Python for live; **LLM, once**, for offline prose |
 
 Those roles are real. They are not reasons to pay for five contexts.
 
@@ -101,16 +110,16 @@ These are constraints, not a bake-off. The plan for rubric caching, tool-schema 
 
 | Constraint | Phase 1 rule |
 | --- | --- |
-| LLM calls per successful `generate` | **1** (narrative). Gates, fetch, schema, score, render = zero calls. |
+| LLM calls per successful live `generate` | One per AC × bounded suite batch. Gates, fetch, schema, merge, score, render = zero additional calls. Offline `generate` keeps one narrative call. |
 | Exception | A second call is allowed only for *narrative rewrite after QA edit*, which is later-phase HITL — not phase 1. |
-| Where that call runs in development | Local runtime in §4.5. No hosted API key is required to generate a PDF. |
+| Where that call runs in development | Local Ollama by default; DeepSeek API when `STORY_GUARD_LLM=deepseek`. |
 | AC splitting | Deterministic (newlines / numbering / fixture-provided list). Not an LLM parse. Matches risk R2 mitigation. |
 | Context loaded | **8,192** tokens (`num_ctx`). Do not load the model’s native 128k-class window. The KV cache would swap an 8 GB Mac. |
 | Target tokens per report | **≤ 4,096** total (rubric + score object + completion). |
 | Hard cap per report | **8,192** tokens or **60 s** of generation after the weights are loaded, whichever first. Exceed → fail closed, no PDF. Cold download and the first load are outside the 60 s. |
 | Hard cap per day (dev) | No provider bill. A looping graph that swaps the Mac is a defect. Do not raise `num_ctx` to fit a fat prompt. |
 
-The 4,096 target is the whole narrative call on this machine. If a fixture’s raw ADO blob is being stuffed into the prompt, the design is wrong — shrink the payload, do not raise the cap. The earlier 20,000-token hosted ceiling does not apply while development runs locally.
+The 4,096 target is the whole narrative call on the local machine. If a fixture’s raw ADO blob is being stuffed into the prompt, the design is wrong — shrink the payload, do not raise the cap. DeepSeek uses its API `max_tokens` limit when selected.
 
 ### 4.2 What the model is allowed to see
 
@@ -157,7 +166,7 @@ If the writer disagrees with a count, that is a scorer bug or a fixture bug — 
 | Tool schemas | Narrative node has **no tools** in phase 1. If a later spike adds tools, pass only the two adapter signatures, not a kitchen-sink MCP catalogue. |
 | Structured output | The local runner’s JSON mode (or a JSON schema) constrains the one call. The body must still match `headline`, `sections[]`, `actions[]`. Invalid JSON → retry once → fail closed. |
 | Observability | Record token count and latency on every `generate` locally. LangSmith is the eval hook when a key is configured. A missing key must not block the PDF. |
-| Context isolation | Do **not** isolate AC / tests / bugs into separate LLM contexts in phase 1. Isolation is how the headline loses the P1 bug. If a later report grows past the 4,096-token target because fixtures got huge, isolate *retrieval*, not *judgement*. |
+| Context isolation | Live coverage is judged one acceptance criterion against one bounded test-suite batch per call, then the scores are combined into one PDF. Story health, the headline, and the action list are written in code from the full record, so an open bug is not dropped when a call sees only one criterion. |
 
 ### 4.4 Unit-economics sanity check
 
@@ -177,13 +186,14 @@ Development runs on a Mac with **8 GB** of unified memory. macOS, the browser, a
 
 | Item | Choice |
 | --- | --- |
-| Runner | **Ollama**, OpenAI-compatible API at `http://127.0.0.1:11434/v1`. No API key. |
-| Default | **Qwen3.5 4B**, tag `qwen3.5:4b`, about 3.4 GB. |
+| Runner | **Ollama** by default, or **DeepSeek API** when selected with `STORY_GUARD_LLM=deepseek`. |
+| Default | **Qwen3.5 4B**, tag `qwen3.5:4b`, about 3.3 GB. |
 | Fallback | **Phi-4 Mini**, tag `phi4-mini`, about 2.5 GB. Same `num_ctx`. Use it when the default will not stay resident with the editor open. |
-| Context | `num_ctx` **8192** on whichever tag is loaded. |
-| Out | 7B–12B checkpoints (about 5–7 GB). They fit a discrete 8 GB GPU. They do not fit this Mac while a person is working. A hosted model is not a second dev stack. |
+| Hosted option | **ChatGPT API** (`STORY_GUARD_LLM=chatgpt`, `OPENAI_API_KEY`, `OPENAI_MODEL`, default `gpt-5.6-luna`) or **DeepSeek API** (`DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL`, default `deepseek-flash`). `STORY_GUARD_MODEL`, when set, overrides the provider model. No local model is loaded for API calls. |
+| Context | Ollama uses `num_ctx` **8192**. DeepSeek uses its API `max_tokens` limit. |
+| Out | A second resident model, and `qwen3.5:9b` (about 6.6 GB), which does not stay resident on this Mac. |
 
-If an Ollama tag moves, keep the size class (weights at or under about 3.5 GB). Do not step up to a 7B to chase quality. One model loaded at a time.
+`qwen3.5:4b` is the resident model when Ollama is selected. On an 8 GB Mac, unload `qwen3.5:9b` and keep one model loaded. With DeepSeek selected, no Ollama model is required. Live analysis calls the configured provider once per acceptance criterion and once per test suite, then code combines the scores and writes the PDF.
 
 ---
 
@@ -193,7 +203,7 @@ If an Ollama tag moves, keep the size class (weights at or under about 3.5 GB). 
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | D6 | Orchestrator | LangGraph as a code-node workflow | Durable state, later HITL, traces; nodes are Python; only one node is an LLM | CrewAI as primary; dual-track LangGraph+CrewAI; PydanticAI / Agents SDK as primary | 29 Sep 2026 | Gugan | Proposed lock |
 | D10 | Single vs multi-agent | Single pipeline: code scores, one LLM narrates | Task is small, shared-context, deterministic; crews cost 3–15× and invite guessed mappings | Parser+auditor+analyst+correlator+writer crew; supervisor-of-specialists in LangGraph | 29 Sep 2026 | Gugan | Proposed lock |
-| D7 | Development narrative model | Local Ollama on an 8 GB Mac. Default `qwen3.5:4b`. Fallback `phi4-mini`. `num_ctx` 8192. | The build machine has 8 GB shared with the OS and the editor. One call over a compact score object is what fits. | Hosted API as the dev default; 7B+ checkpoints; loading two models; native 128k context | 29 Sep 2026 | Gugan | Proposed lock |
+| D7 | Development narrative model | Ollama by default (`qwen3.5:4b`, fallback `phi4-mini`) with optional DeepSeek API (`deepseek-flash`, or `STORY_GUARD_MODEL`). | Local development remains keyless, while the API option removes local memory constraints. | 7B+ checkpoints; loading two models; native 128k context | 29 Sep 2026 | Gugan | Proposed lock |
 
 Rejected options, one line each (Overview stack table):
 
@@ -203,7 +213,7 @@ Rejected options, one line each (Overview stack table):
 | LangGraph supervisor + LLM subagents | Same cost shape as CrewAI, different drawing. |
 | Dual-track CrewAI *and* LangGraph | Week-2 non-goal. |
 | “The model *is* the scorecard” | QA will not share a mood. Counts live in code (B4). |
-| Hosted model, or a 7B+ local model, as the dev default | Does not run beside the OS and the editor in 8 GB. |
+| 7B+ local model as the dev default | Does not run beside the OS and the editor in 8 GB. DeepSeek is available as an explicit hosted option. |
 | Mid-flow HITL inside the graph | Parked. Phase 1 HITL is after the PDF exists. |
 
 ---
@@ -226,7 +236,7 @@ A desire to “look more agentic” in a demo is not a reversal criterion.
 | Backlog seed | Change under this lock |
 | --- | --- |
 | B4 Deterministic scoring engine | Unchanged. This is the product. |
-| B5 Narrative writer | One structured call to the local model in §4.5. Prompt = stable rubric prefix + score JSON. `num_ctx` 8192. JSON mode. No tools. |
+| B5 Narrative writer | One structured call to the configured provider in §4.5. Prompt = stable rubric prefix + score JSON. JSON mode. No tools. |
 | B7 CLI `generate --story-id` | Thin graph invoke, or functions with the same node list. |
 | B8 Eval on 5 fixtures | Assert headlines and RAG from the **engine**, then that the prose cites those numbers. Do not eval “does the crew sound like QA.” |
 | Architecture diagram | Replace the Web UI / API / DB drawing with the graph in §1. |

@@ -198,6 +198,40 @@ def test_open_p1_sets_critical_at_risk():
     assert score["none_count"] == 8
 
 
+def test_compound_rejected_status_is_not_an_open_bug():
+    record = _load()
+    record["bugs"] = [
+        {
+            "id": "122595",
+            "title": "Dashboard screen has UI issue",
+            "severity": "3 - Medium",
+            "priority": "P2",
+            "status": "Rejected / Unable to Reproduce",
+            "age": "1",
+            "found_in": "Staging",
+            "linked_story_id": "121213",
+            "linked_tc_id": "",
+        },
+        {
+            "id": "122590",
+            "title": "Password field is not accepting special characters",
+            "severity": "2 - High",
+            "priority": "P2",
+            "status": "New",
+            "age": "1",
+            "found_in": "Staging",
+            "linked_story_id": "121213",
+            "linked_tc_id": "",
+        },
+    ]
+    score = score_health(record)
+    assert score["open_bug_count"] == 1
+    assert score["bug_count"] == 2
+    assert score["open_bugs_by_priority"] == {"P1": 0, "P2": 1, "P3": 0, "P4": 0}
+    assert score["health"] == "High"
+    assert score["health_band"] == "At Risk"
+
+
 def test_resolved_bug_does_not_raise_story_health():
     record = _load()
     record["bugs"] = [

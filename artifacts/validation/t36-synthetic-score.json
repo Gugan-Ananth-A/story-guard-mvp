@@ -1,0 +1,79 @@
+{
+  "story_id": "SYN-2401",
+  "title": "Update account contact details",
+  "source": "fixture",
+  "ac_field": "present",
+  "scenario_count": 2,
+  "scenarios": [
+    {
+      "ac_id": "SYN-AC-001",
+      "covered": true,
+      "mapped_test_ids": [
+        "SYN-TC-001"
+      ],
+      "depth": "Positive scenarios are covered",
+      "gap": "No Negative scenarios Covered\nNo Adhoc scenarios Covered",
+      "row_status": "partial",
+      "buckets_present": 1
+    },
+    {
+      "ac_id": "SYN-AC-002",
+      "covered": true,
+      "mapped_test_ids": [
+        "SYN-TC-002"
+      ],
+      "depth": "Positive scenarios are covered",
+      "gap": "No Negative scenarios Covered\nNo Adhoc scenarios Covered",
+      "row_status": "partial",
+      "buckets_present": 1
+    }
+  ],
+  "test_count": 3,
+  "mapped_count": 2,
+  "bug_count": 1,
+  "open_bug_count": 1,
+  "escaped_bug_count": 0,
+  "open_bugs_by_priority": {
+    "P1": 0,
+    "P2": 1,
+    "P3": 0,
+    "P4": 0
+  },
+  "adequate_count": 0,
+  "partial_count": 2,
+  "none_count": 0,
+  "rag": "Amber",
+  "bugs": [
+    {
+      "id": "SYN-BUG-001",
+      "title": "Verification notice appears late after retry",
+      "severity": "2 - High",
+      "priority": "P2",
+      "status": "Active",
+      "age": 5,
+      "found_in": "Staging",
+      "linked_story_id": "SYN-2401",
+      "linked_tc_id": "SYN-TC-003",
+      "assigned_to": "",
+      "application": "Synthetic Accounts",
+      "created": "2026-10-15"
+    }
+  ],
+  "coverage_by_type": {
+    "happy": 2,
+    "negative": 1,
+    "edge": 0,
+    "security": 0,
+    "adhoc": 0,
+    "unset": 0
+  },
+  "health": "High",
+  "health_band": "At Risk",
+  "rule_ids": [
+    "SR-1",
+    "SR-2",
+    "SR-3"
+  ],
+  "note": "",
+  "generated_at": "2026-10-21T09:00:00Z"
+}

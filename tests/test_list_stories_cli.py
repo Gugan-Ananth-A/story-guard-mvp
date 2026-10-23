@@ -133,13 +133,14 @@ def test_fetch_story_and_bug_writes_no_fixtures_or_artifacts(
     assert not (artifacts_dir / "999.pdf").exists()
 
 
-def test_sprints_command_prints_iteration_paths(monkeypatch, capsys):
+def test_sprints_command_prints_iteration_paths(tmp_path, monkeypatch, capsys):
     paths = ["Commerce\\Release 1\\Sprint 1", "Commerce\\Release 1\\Sprint 2"]
 
     class FakeADOClient:
         def list_iterations(self):
             return paths
 
+    monkeypatch.setattr("story_guard.envfile.env_path", lambda: tmp_path / "missing.env")
     monkeypatch.setattr(
         ADOClient,
         "from_env",
@@ -181,7 +182,8 @@ def test_sprints_command_handles_project_access_denial_without_artifacts(
     assert not artifacts_dir.exists()
 
 
-def test_list_stories_command_reports_missing_ado_configuration(monkeypatch, capsys):
+def test_list_stories_command_reports_missing_ado_configuration(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("story_guard.envfile.env_path", lambda: tmp_path / "missing.env")
     monkeypatch.delenv("ADO_PROJECT_URL", raising=False)
     monkeypatch.delenv("ADO_PAT", raising=False)
 
@@ -199,6 +201,7 @@ def test_generate_sprint_runs_each_story_with_its_own_plan(
     from story_guard.graph import load_live_story
 
     monkeypatch.delenv("ADO_PAT", raising=False)
+    monkeypatch.setattr("story_guard.envfile.env_path", lambda: tmp_path / "missing.env")
 
     def story_bundle(story_id, test_cases):
         return {
