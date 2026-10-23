@@ -77,6 +77,94 @@ def test_token_count_is_the_successful_narrative_call(monkeypatch):
     assert result["narrative_latency_ms"] >= 0
 
 
+def test_payload_includes_step_pairs_and_cases_without_steps(monkeypatch):
+    seen = []
+
+    def post(payload):
+        seen.append(payload)
+        return _reply(json.dumps(_good()))
+
+    monkeypatch.setenv("STORY_GUARD_LLM", "ollama")
+    monkeypatch.delenv("STORY_GUARD_MODEL", raising=False)
+    monkeypatch.setattr("story_guard.narrative._post", post)
+    score = _score()
+    score["test_cases"] = [
+        {
+            "id": "TC-1",
+            "title": "Successful login",
+            "steps": [
+                {
+                    "action": "Enter valid credentials and select Login.",
+                    "expected_result": "The user reaches the dashboard.",
+                }
+            ],
+        },
+        {"id": "TC-2", "title": "Legacy case without steps", "steps": []},
+    ]
+    score["test_suite_truncated"] = False
+
+    result = write_narrative(score)
+    sent_score = json.loads(seen[0]["messages"][1]["content"])
+
+    assert sent_score["test_cases"][0]["steps"] == [
+        {
+            "action": "Enter valid credentials and select Login.",
+            "expected_result": "The user reaches the dashboard.",
+        }
+    ]
+    assert sent_score["test_cases"][1] == {
+        "id": "TC-2",
+        "title": "Legacy case without steps",
+        "steps": [],
+    }
+    assert result["score"]["test_suite_truncated"] is False
+    assert score["test_suite_truncated"] is False
+
+
+def test_large_suite_is_truncated_and_recorded_on_returned_score(monkeypatch):
+    seen = []
+
+    def post(payload):
+        seen.append(payload)
+        return _reply(json.dumps(_good()))
+
+    monkeypatch.setenv("STORY_GUARD_LLM", "ollama")
+    monkeypatch.delenv("STORY_GUARD_MODEL", raising=False)
+    monkeypatch.setattr("story_guard.narrative._post", post)
+    score = _score()
+    score["test_cases"] = [
+        {
+            "id": f"TC-{index}",
+            "title": f"Case {index}",
+            "steps": [
+                {
+                    "action": "Perform action. " * 400,
+                    "expected_result": "Expected outcome. " * 400,
+                }
+            ],
+        }
+        for index in range(6)
+    ]
+    score["test_cases"].append(
+        {"id": "TC-NO-STEPS", "title": "Case without steps", "steps": []}
+    )
+    score["test_suite_truncated"] = False
+
+    result = write_narrative(score)
+    sent_score = json.loads(seen[0]["messages"][1]["content"])
+    estimated_prompt_tokens = (
+        len(seen[0]["messages"][0]["content"])
+        + len(seen[0]["messages"][1]["content"])
+        + 2
+    ) // 3
+
+    assert result["score"]["test_suite_truncated"] is True
+    assert sent_score["test_suite_truncated"] is True
+    assert [case["id"] for case in sent_score["test_cases"]] == ["TC-NO-STEPS"]
+    assert estimated_prompt_tokens <= narrative.PROMPT_TOKEN_TARGET
+    assert len(score["test_cases"]) == 7
+
+
 def test_structured_parser_accepts_ollama_thinking_fallback():
     response = {
         "message": {

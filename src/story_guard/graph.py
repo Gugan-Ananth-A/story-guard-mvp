@@ -81,6 +81,7 @@ class GraphState(TypedDict, total=False):
     story_id: str
     live: bool
     test_plan_id: str
+    live_record: dict
     record: dict
     score: dict
     narrative: dict
@@ -126,6 +127,8 @@ def gate_input(state: GraphState) -> dict:
         raise GateError("live flag must be a boolean")
     if story_id != _ACCEPTED_STORY_ID and not live:
         raise GateError(f"story id {story_id} is not in the fixture")
+    if live and int(story_id) <= 0:
+        raise GateError("live story id must be a positive integer")
     plan_id = state.get("test_plan_id")
     if plan_id is not None:
         plan_id = plan_id.strip() if isinstance(plan_id, str) else ""
@@ -144,6 +147,10 @@ def gate_input(state: GraphState) -> dict:
 
 def fetch(state: GraphState) -> dict:
     if state.get("live", False):
+        preloaded = state.get("live_record")
+        if isinstance(preloaded, dict):
+            _notify(state, f"using the preloaded live story {state.get('story_id')}")
+            return {"record": preloaded}
         _notify(state, f"fetching live story {state.get('story_id')} and test suites")
         return {"record": _fetch_live(state)}
     _notify(state, f"loading fixture for story {state.get('story_id')}")
@@ -208,6 +215,84 @@ def _blank_story_record() -> dict:
         "note": "",
         "tests": [],
         "bugs": [],
+    }
+
+
+def load_live_story(
+    story_id: str,
+    client=None,
+    story_bundle: dict | None = None,
+    plan_memberships: dict[str, list[int]] | None = None,
+) -> dict:
+    """Build one live graph record from a story and its explicit plan links."""
+    from story_guard.ado_client import ADOClient, ADOResponseError
+
+    ado_client = client or ADOClient.from_env()
+    if story_bundle is None:
+        results = ado_client.fetch_many_stories([int(story_id)])
+        story_bundle = results[0]
+    if not isinstance(story_bundle, dict):
+        raise ADOResponseError(f"ADO story {story_id} response is invalid")
+    if "error" in story_bundle:
+        error = story_bundle.get("error")
+        message = error.get("message") if isinstance(error, dict) else None
+        raise ADOResponseError(message or f"Could not load ADO story {story_id}")
+
+    story = story_bundle.get("story")
+    test_cases = story_bundle.get("test_cases")
+    if not isinstance(story, dict) or not isinstance(test_cases, list):
+        raise ADOResponseError(f"ADO story {story_id} bundle is incomplete")
+    if str(story.get("id")) != story_id:
+        raise ADOResponseError(f"ADO returned the wrong story for ID {story_id}")
+
+    if plan_memberships is None:
+        case_ids = [int(case["id"]) for case in test_cases]
+        plan_memberships = ado_client.test_case_plan_memberships(case_ids)
+    return _record_from_plan_links(story_bundle, plan_memberships)
+
+
+def _record_from_plan_links(
+    bundle: dict, plan_memberships: dict[str, list[int]]
+) -> dict:
+    """Keep only test cases that belong to an explicit test plan."""
+    story = bundle["story"]
+    description = story.get("description") or ""
+    linked_cases = bundle.get("test_cases") or []
+    tests = []
+    plan_ids = set()
+    for case in linked_cases:
+        case_id = str(case["id"])
+        linked_plan_ids = plan_memberships.get(case_id, [])
+        if not linked_plan_ids:
+            continue
+        tests.append(case)
+        plan_ids.update(linked_plan_ids)
+
+    if plan_ids:
+        note = "Linked Test Plan IDs: " + ", ".join(
+            str(plan_id) for plan_id in sorted(plan_ids)
+        )
+    else:
+        note = (
+            "No explicitly linked Test Plan was found; test coverage could not be assessed."
+        )
+    raw_ac = story.get("raw_ac_text") or ""
+    acceptance = story.get("acceptance_criteria") or []
+    return {
+        "id": story["id"],
+        "title": story["title"],
+        "type": story["type"],
+        "state": story["state"],
+        "description": description,
+        "area": story.get("area") or "",
+        "iteration": story.get("iteration") or "",
+        "acceptance_criteria_raw": raw_ac,
+        "acceptance_criteria": acceptance,
+        "scenarios": _criteria_from_text(description),
+        "tests": tests,
+        "bugs": bundle.get("bugs") or [],
+        "note": note,
+        "source": "Azure DevOps live data",
     }
 
 
@@ -355,11 +440,16 @@ def write_narrative(state: GraphState) -> dict:
     _notify(state, "asking the model for the report narrative")
     result = request_narrative(state["score"])
     _notify(state, "narrative accepted")
-    return {
+    # The narrative call may return a bounded copy of the score. Rendering
+    # must use that copy so a truncated suite is visible on the report.
+    returned = {
         "narrative": result["narrative"],
         "token_count": result["token_count"],
         "narrative_latency_ms": result["narrative_latency_ms"],
     }
+    if "score" in result:
+        returned["score"] = result["score"]
+    return returned
 
 
 def render_pdf(state: GraphState) -> dict:

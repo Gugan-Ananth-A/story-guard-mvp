@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from story_guard.analysis import analyze_live, result_from_judgment
+from story_guard.analysis import _PROMPT, analyze_live, result_from_judgment
 from story_guard.narrative import NarrativeError
 
 
@@ -187,7 +187,8 @@ def test_ollama_judges_one_criterion_against_one_suite(monkeypatch):
     assert "122590" not in user
     assert "How to judge coverage" in system
     assert "one acceptance criterion and one suite" in system
-    assert 'Sharing a word such as "login" is not enough.' in system
+    assert 'Sharing only a generic word such as "login" is not enough.' in system
+    assert "P is happy, N is negative, and A is adhoc." in system
     assert "no listed test checks" in system
     assert "Do not use a percent sign" in system
     assert "partially covered" in system
@@ -916,6 +917,111 @@ def test_the_same_test_can_cover_a_different_path_for_each_criterion():
     assert "No Negative scenarios Covered" in rows["AC-01"]["gap"]
     assert "Negative scenarios are covered" in rows["AC-02"]["depth"]
     assert "No Positive scenarios Covered" in rows["AC-02"]["gap"]
+
+
+def test_title_token_sets_the_path_and_failure_proof_stays_positive():
+    record = _record()
+    record["bugs"] = []
+    record["acceptance_criteria"] = [
+        {
+            "ac_id": "AC-02",
+            "text": (
+                "Invalid credentials. When the user submits an unregistered email, "
+                "or a registered email with the wrong password, an error says the "
+                "credentials are invalid, and the user stays on the login page."
+            ),
+            "testable": True,
+            "flags": [],
+        }
+    ]
+    record["tests"] = [
+        {"id": "124311", "title": "[US-XXXXX-N01] Verify login fails with an unregistered email address", "type": ""},
+        {"id": "124312", "title": "[US-XXXXX-N02] Verify login fails with a registered email and wrong password", "type": ""},
+        {"id": "124319", "title": "[US-XXXXX-A04] Verify password field is case-sensitive", "type": ""},
+    ]
+    judgment = _judgment()
+    judgment["reviews"] = [
+        {
+            "ac_id": "AC-02",
+            "mapped_test_ids": ["124311", "124312", "124319"],
+            "test_types": {"124311": "negative", "124312": "negative", "124319": "happy"},
+            "coverage_status": "partial",
+            "finding": "AC-02 is checked by 124311, 124312, 124319.",
+        }
+    ]
+    result = result_from_judgment(record, judgment)
+    row = result["score"]["scenarios"][0]
+    paths = row  # depth and gap show the buckets
+
+    assert row["row_status"] == "adequate"
+    assert "Positive scenarios are covered" in paths["depth"]
+    assert "Negative scenarios are covered" in paths["depth"]
+    assert "Adhoc scenarios are covered" in paths["depth"]
+    assert result["score"]["coverage_by_type"]["adhoc"] == 1
+    assert result["score"]["coverage_by_type"]["negative"] == 2
+
+
+def test_negative_and_adhoc_variants_join_a_linked_behavior():
+    record = _record()
+    record["bugs"] = []
+    record["acceptance_criteria"] = [
+        {
+            "ac_id": "AC-03",
+            "text": (
+                "Password visibility — Show. When the user has entered a password "
+                "and clicks Show, the password is displayed as plain text."
+            ),
+            "testable": True,
+            "flags": [],
+        },
+        {
+            "ac_id": "AC-04",
+            "text": (
+                "Forgot Password navigation. When the user clicks Forgot Password?, "
+                "the user is redirected to the password recovery page."
+            ),
+            "testable": True,
+            "flags": [],
+        },
+    ]
+    record["tests"] = [
+        {"id": "124309", "title": "[US-XXXXX-P03] Verify password is displayed as plain text when Show is clicked", "type": ""},
+        {"id": "124314", "title": "[US-XXXXX-N04] Verify password remains masked when Show is NOT clicked", "type": ""},
+        {"id": "124316", "title": "[US-XXXXX-A01] Verify Show/Hide toggle behavior with empty password field", "type": ""},
+        {"id": "124311", "title": "[US-XXXXX-N01] Verify login fails with an unregistered email address", "type": ""},
+        {"id": "124310", "title": "[US-XXXXX-P04] Verify Forgot Password? link redirects to the password recovery page", "type": ""},
+        {"id": "124321", "title": "[US-XXXXX-A06] Verify Forgot Password? link is reachable across viewports", "type": ""},
+        {"id": "124401", "title": "[US-XXXXX-N09] Verify the footer link opens the help page", "type": ""},
+        {"id": "124402", "title": "[US-XXXXX-A10] Verify the footer link survives a refresh", "type": ""},
+    ]
+    judgment = _judgment()
+    judgment["reviews"] = [
+        {
+            "ac_id": "AC-03",
+            "mapped_test_ids": ["124309"],
+            "test_types": {"124309": "happy"},
+            "coverage_status": "adequate",
+            "finding": "AC-03 is checked by 124309.",
+        },
+        {
+            "ac_id": "AC-04",
+            "mapped_test_ids": ["124310", "124321"],
+            "test_types": {"124310": "happy", "124321": "happy"},
+            "coverage_status": "adequate",
+            "finding": "AC-04 is checked by 124310, 124321.",
+        },
+    ]
+    result = result_from_judgment(record, judgment)
+    rows = {row["ac_id"]: row for row in result["score"]["scenarios"]}
+
+    assert rows["AC-03"]["mapped_test_ids"] == ["124309", "124314", "124316"]
+    assert rows["AC-03"]["row_status"] == "adequate"
+    assert "124311" not in rows["AC-03"]["mapped_test_ids"]
+    assert rows["AC-04"]["mapped_test_ids"] == ["124310", "124321"]
+    assert rows["AC-04"]["row_status"] == "partial"
+    assert "No Negative scenarios Covered" in rows["AC-04"]["gap"]
+    assert "Adhoc scenarios are covered" in rows["AC-04"]["depth"]
+    assert "P is happy, N is negative, and A is adhoc." in _PROMPT
 
 
 def test_a_mapped_test_with_no_model_type_is_classified_from_its_text(monkeypatch):

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from story_guard.cli import main
-from story_guard.graph import build_generate_graph, fetch, run
+from story_guard.graph import build_generate_graph, fetch, run, write_narrative as narrative_node
 from story_guard.narrative import NarrativeError
 from story_guard.render import RenderError, render_markdown
 
@@ -58,6 +58,25 @@ def test_generate_graph_order():
         ("write_narrative", "render_pdf"),
         ("render_pdf", "__end__"),
     }
+
+
+def test_narrative_node_keeps_the_bounded_score_for_rendering(monkeypatch):
+    score = {"test_suite_truncated": True, "test_cases": []}
+    narrative = {"headline": "Complete", "sections": [], "actions": []}
+    monkeypatch.setattr(
+        "story_guard.graph.request_narrative",
+        lambda _score: {
+            "score": score,
+            "narrative": narrative,
+            "token_count": 12,
+            "narrative_latency_ms": 4,
+        },
+    )
+
+    result = narrative_node({"score": {"test_suite_truncated": False}})
+
+    assert result["score"] is score
+    assert result["score"]["test_suite_truncated"] is True
 
 
 def _pin_ollama_env(tmp_path, monkeypatch) -> None:
@@ -1093,17 +1112,17 @@ def test_test_plan_id_applies_to_one_sprint_story(tmp_path, monkeypatch, capsys)
     capsys.readouterr()
 
 
-def test_sprint_requires_live(tmp_path, monkeypatch, capsys):
-    from story_guard.ado_client import ADOClient
+def test_sprint_without_ado_configuration_exits_cleanly(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("story_guard.envfile.env_path", lambda: tmp_path / "missing.env")
+    monkeypatch.delenv("ADO_PROJECT_URL", raising=False)
+    monkeypatch.delenv("ADO_PAT", raising=False)
 
-    def fail(cls):
-        raise AssertionError("ADO client was constructed")
+    result = main(["generate", "--sprint", "Project\\Sprint"])
 
-    monkeypatch.setattr(ADOClient, "from_env", classmethod(fail))
-    monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
-    assert main(["generate", "--sprint", "Ecom MVP\\Phase"]) == 1
-    assert "--sprint requires --live" in capsys.readouterr().err
-    assert list(tmp_path.iterdir()) == []
+    captured = capsys.readouterr()
+    assert result == 1
+    assert captured.out == ""
+    assert "ADO_PROJECT_URL, ADO_PAT" in captured.err
 
 
 def test_empty_sprint_generates_nothing(tmp_path, monkeypatch, capsys):

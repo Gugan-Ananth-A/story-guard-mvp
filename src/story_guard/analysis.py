@@ -63,10 +63,12 @@ Return one JSON object and nothing else. Do not use a Markdown fence. Do not cal
 
 How to judge coverage. This call is one acceptance criterion and one suite batch.
 - Read that criterion's text, including the expected result. A story description part is context for that criterion. Do not map a test for behavior that this criterion does not require.
-- A test may be listed only when its title, description, steps, or parameters check the same behavior and the same expected result. Sharing a word such as "login" is not enough.
+- A test may be listed when its title, description, steps, or parameters check this criterion's behavior. Also list a negative or adhoc case of that same behavior, including the opposite result and the edge variants. Sharing only a generic word such as "login" is not enough.
 - Each test text may be one part of a longer case. Judge this part on its own. Other parts are reviewed in other calls and the caller combines them.
 - The test type field is a hint. An empty type does not block a match; classify a matched test rather than treating the empty field as evidence of a match.
-- For every mapped test whose type is empty, classify it in test_types from the title, description, steps, and parameters in this part. Do not change a source type that is already happy, negative, or adhoc.
+- A title token such as -P01, -N04, or -A06 is the path label. P is happy, N is negative, and A is adhoc. Put that label in test_types.
+- When this criterion's expected result is itself a failure, label one case that proves that result as happy, and label another failure-path case negative when one is listed.
+- For every mapped test whose type is empty and whose title has no P, N, or A token, classify it in test_types from the title, description, steps, and parameters in this part. Do not change a source type that is already happy, negative, or adhoc.
 - A type is kept only when it is happy, negative, or adhoc. Use happy for a positive case. Use negative for a security case. Use adhoc for an edge case.
 - Existing source links are intentionally not supplied. Decide the mapping from the criterion and the test evidence in this message.
 - When no test checks this criterion, mapped_test_ids is empty. The finding says that no listed test checks it.
@@ -90,6 +92,29 @@ _ADHOC_HINT = re.compile(
     re.IGNORECASE,
 )
 _TYPE_RANK = {"negative": 3, "adhoc": 2, "happy": 1}
+_TITLE_PATH = re.compile(
+    r"(?<![A-Za-z0-9])([PNA])(\d{2})(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+_TITLE_KIND = {"P": "happy", "N": "negative", "A": "adhoc"}
+_FAILURE_CRITERION = re.compile(
+    r"\b(?:invalid|unregistered|incorrect|wrong|fails?|failed|error|rejected|denied)\b"
+    r"|must not|should not|stays? on",
+    re.IGNORECASE,
+)
+_CONTENT_WORD = re.compile(r"[a-z0-9]+")
+_TITLE_TAG = re.compile(r"\[[^\]]*\]")
+_STOP_WORDS = frozenset(
+    """
+    a an the and or of to for on in at by with from into over when where
+    while user users given then that this these those is are was be been
+    being it its their his her as not no nor but if click clicks clicked
+    enter enters entered verify verifies verified should must page screen
+    field button after before behavior correctly handled has says during
+    across again away back via using under functional reachable multiple
+    direct does doesn submit trigger
+    """.split()
+)
 
 Progress = Callable[[str], None]
 # One resident model. A second live-review call waits until the first returns.
@@ -603,12 +628,161 @@ def _fill_missing_types(types: dict[str, str], ids: list[str], tests: list) -> N
 
 def _inferred_type(test: dict) -> str:
     """Last resort when every part omitted a path label."""
+    titled = _title_path(str(test.get("title") or ""))
+    if titled:
+        return titled
     body = _test_evidence(test)
     if _NEGATIVE_HINT.search(body):
         return "negative"
     if _ADHOC_HINT.search(body):
         return "adhoc"
     return "happy"
+
+
+def _title_path(title: str) -> str:
+    """Read a title token such as -P01, -N04, or -A06. P3 is a priority, not a path."""
+    match = _TITLE_PATH.search(title)
+    if match is None:
+        return ""
+    return _TITLE_KIND.get(match.group(1).upper(), "")
+
+
+def _expects_failure(text: str) -> bool:
+    return _FAILURE_CRITERION.search(text) is not None
+
+
+def _content_words(text: str) -> set[str]:
+    plain = _TITLE_TAG.sub(" ", text.lower())
+    plain = _TITLE_PATH.sub(" ", plain)
+    return {
+        word
+        for word in _CONTENT_WORD.findall(plain)
+        if len(word) > 2 and word not in _STOP_WORDS
+    }
+
+
+def _word_counts(tests: list[dict]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for test in tests:
+        if not isinstance(test, dict):
+            continue
+        for word in _content_words(_test_evidence(test)):
+            counts[word] = counts.get(word, 0) + 1
+    return counts
+
+
+def _distinctive(words: set[str], counts: dict[str, int], suite_size: int) -> set[str]:
+    """A word used by half the suite or more does not identify one behavior.
+
+    A word that appears once or twice is still distinctive in a small suite.
+    """
+    return {
+        word
+        for word in words
+        if counts.get(word, 0) <= 2 or counts.get(word, 0) * 2 < suite_size
+    }
+
+
+def _include_behavior_variants(
+    criterion: dict,
+    ids: list[str],
+    tests: list[dict],
+) -> list[str]:
+    """Add negative and adhoc cases of a behavior the model already accepted.
+
+    A title token N or A is required. The case must share a distinctive word
+    with the criterion or with a test already linked to it. A generic word
+    that appears across the suite does not qualify.
+    """
+    if not ids:
+        return ids
+    counts = _word_counts(tests)
+    suite_size = len([test for test in tests if isinstance(test, dict)])
+    by_id = {
+        str(test.get("id") or ""): test
+        for test in tests
+        if isinstance(test, dict)
+    }
+    seed = _distinctive(_content_words(str(criterion.get("text") or "")), counts, suite_size)
+    for test_id in ids:
+        test = by_id.get(test_id)
+        if isinstance(test, dict):
+            seed |= _distinctive(_content_words(_test_evidence(test)), counts, suite_size)
+    if not seed:
+        return ids
+    found = list(ids)
+    seen = set(ids)
+    for test in tests:
+        if not isinstance(test, dict):
+            continue
+        test_id = str(test.get("id") or "")
+        if test_id in seen or _title_path(str(test.get("title") or "")) not in {"negative", "adhoc"}:
+            continue
+        words = _distinctive(_content_words(_test_evidence(test)), counts, suite_size)
+        if words & seed:
+            seen.add(test_id)
+            found.append(test_id)
+    return found
+
+
+def _paths_for_criterion(
+    criterion: dict,
+    ids: list[str],
+    tests: list[dict],
+    model_types: dict[str, str],
+) -> dict[str, str]:
+    """Title token wins. A failure criterion keeps one proving case Positive."""
+    by_id = {
+        str(test.get("id") or ""): test
+        for test in tests
+        if isinstance(test, dict)
+    }
+    paths: dict[str, str] = {}
+    for test_id in ids:
+        test = by_id.get(test_id, {})
+        titled = _title_path(str(test.get("title") or ""))
+        if titled:
+            paths[test_id] = titled
+            continue
+        chosen = _kept_type(model_types.get(test_id))
+        paths[test_id] = chosen or _inferred_type(test if isinstance(test, dict) else {})
+    _promote_failure_proof(criterion, ids, tests, paths)
+    return paths
+
+
+def _promote_failure_proof(
+    criterion: dict,
+    ids: list[str],
+    tests: list[dict],
+    paths: dict[str, str],
+) -> None:
+    """One case that proves a failure result is Positive. Another failure case stays Negative."""
+    if not _expects_failure(str(criterion.get("text") or "")):
+        return
+    if any(paths.get(test_id) == "happy" for test_id in ids):
+        return
+    negatives = [test_id for test_id in ids if paths.get(test_id) == "negative"]
+    if len(negatives) < 2:
+        return
+    counts = _word_counts(tests)
+    suite_size = len([test for test in tests if isinstance(test, dict)])
+    wanted = _distinctive(_content_words(str(criterion.get("text") or "")), counts, suite_size)
+    by_id = {
+        str(test.get("id") or ""): test
+        for test in tests
+        if isinstance(test, dict)
+    }
+
+    def rank(test_id: str) -> tuple[int, str]:
+        test = by_id.get(test_id, {})
+        words = _distinctive(
+            _content_words(_test_evidence(test if isinstance(test, dict) else {})),
+            counts,
+            suite_size,
+        )
+        return (-len(words & wanted), test_id)
+
+    paths[min(negatives, key=rank)] = "happy"
 
 
 def _require_pair(body: dict, criterion: dict, tests: list[dict]) -> dict:
@@ -871,6 +1045,25 @@ def _score_from_judgment(record: dict, judgment: dict) -> dict:
     health = factual["health"]
     health_band = factual["health_band"]
     reviews = _reviews_by_id(judgment.get("reviews"), known_tests)
+    fetched = [test for test in record.get("tests") or [] if isinstance(test, dict)]
+    for criterion in _criteria_to_judge(record):
+        if not isinstance(criterion, dict):
+            continue
+        review = reviews.get(str(criterion.get("ac_id") or ""))
+        if not isinstance(review, dict):
+            continue
+        ids = _include_behavior_variants(
+            criterion,
+            list(review.get("mapped_test_ids") or []),
+            fetched,
+        )
+        review["mapped_test_ids"] = ids
+        review["test_types"] = _paths_for_criterion(
+            criterion,
+            ids,
+            fetched,
+            review.get("test_types") or {},
+        )
     scored_tests = _tests_with_predicted_types(record, reviews)
     factual["coverage_by_type"] = _coverage_by_type(scored_tests)
     rows = []
@@ -970,7 +1163,9 @@ def _tests_with_predicted_types(record: dict, reviews: dict[str, dict]) -> list[
             continue
         row = dict(test)
         if not str(row.get("type") or "").strip():
-            test_type = predicted.get(str(row.get("id") or ""))
+            test_type = _title_path(str(row.get("title") or "")) or predicted.get(
+                str(row.get("id") or "")
+            )
             if test_type in _KEPT_TYPES:
                 row["type"] = test_type
         tests.append(row)

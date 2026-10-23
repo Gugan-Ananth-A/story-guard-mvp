@@ -17,7 +17,11 @@ _USAGE = (
     "       story-guard generate --story-id 121213 --story-id 123086 --live\n"
     "       story-guard generate --story-ids 121213,123086 --live\n"
     "       story-guard generate --sprint \"<iteration path>\" --live\n"
-    "       story-guard generate --story-id 121213 --test-plan-id 121214 --live"
+    "       story-guard generate --sprint '<iteration path>'\n"
+    "       story-guard generate --story-id 121213 --test-plan-id 121214 --live\n"
+    "       story-guard list-stories --iteration-path 'Project\\Iteration'\n"
+    "       story-guard sprints\n"
+    "       story-guard fetch-stories --story-ids 121213 121214"
 )
 
 
@@ -37,22 +41,38 @@ def main(argv: list[str] | None = None) -> int:
     score = sub.add_parser("score")
     score.add_argument("--story-id", required=True)
     generate = sub.add_parser("generate")
-    generate.add_argument("--story-id", action="append")
-    generate.add_argument("--story-ids", action="append")
-    generate.add_argument("--sprint", default="")
+    generate_input = generate.add_mutually_exclusive_group(required=True)
+    generate_input.add_argument("--story-id", action="append")
+    generate_input.add_argument("--story-ids", action="append")
+    generate_input.add_argument("--sprint")
     generate.add_argument("--test-plan-id", default="")
     generate.add_argument("--live", action="store_true", default=False)
+    list_stories = sub.add_parser("list-stories")
+    list_stories.add_argument("--iteration-path", required=True)
+    sub.add_parser("sprints")
+    fetch_stories = sub.add_parser("fetch-stories")
+    fetch_stories.add_argument("--story-ids", nargs="+", type=int, required=True)
     parsed = parser.parse_args(args)
     if parsed.command == "score":
         return _score(parsed.story_id)
     if parsed.command == "generate":
+        # A sprint without --live uses each story's explicit plan membership.
+        # --sprint --live keeps the batch path that loads each story's plan.
+        if parsed.sprint and not parsed.live:
+            return _generate_sprint(parsed.sprint)
         return _generate(
             parsed.story_id,
             parsed.story_ids,
-            parsed.sprint,
+            parsed.sprint or "",
             parsed.live,
             parsed.test_plan_id,
         )
+    if parsed.command == "list-stories":
+        return _list_stories(parsed.iteration_path)
+    if parsed.command == "sprints":
+        return _sprints()
+    if parsed.command == "fetch-stories":
+        return _fetch_stories(parsed.story_ids)
     print(_USAGE, file=sys.stderr)
     return 2
 
@@ -65,6 +85,119 @@ def _score(story_id: str) -> int:
         return 1
     print(json.dumps(state["score"], indent=2))
     return 0
+
+
+def _list_stories(iteration_path: str) -> int:
+    from story_guard.ado_client import ADOClient, ADOClientError
+
+    try:
+        stories = ADOClient.from_env().list_user_stories(iteration_path)
+    except ADOClientError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(json.dumps(stories, indent=2))
+    return 0
+
+
+def _sprints() -> int:
+    from story_guard.ado_client import ADOClient, ADOClientError
+
+    try:
+        iteration_paths = ADOClient.from_env().list_iterations()
+    except ADOClientError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print("\n".join(iteration_paths))
+    return 0
+
+
+def _fetch_stories(story_ids: list[int]) -> int:
+    from story_guard.ado_client import ADOClient, ADOClientError
+
+    try:
+        results = ADOClient.from_env().fetch_many_stories(story_ids)
+    except ADOClientError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(json.dumps(results, indent=2))
+    return 1 if any("error" in result for result in results) else 0
+
+
+def _generate_sprint(iteration_path: str) -> int:
+    """Generate one report per story, using that story's linked test plans."""
+    from story_guard.ado_client import ADOClient, ADOClientError
+    from story_guard.graph import load_live_story
+
+    try:
+        client = ADOClient.from_env()
+        stories = client.list_user_stories(iteration_path)
+    except ADOClientError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    if not stories:
+        print(f"No User Stories found in {iteration_path}")
+        return 0
+
+    bundles = {}
+    failures = []
+    for story in stories:
+        story_id = str(story["id"])
+        try:
+            bundle = client.fetch_many_stories([int(story_id)])[0]
+            if "error" in bundle:
+                error = bundle["error"]
+                message = error.get("message", "could not fetch story")
+                raise ADOClientError(message)
+            bundles[story_id] = bundle
+        except ADOClientError as exc:
+            failures.append((story_id, str(exc)))
+
+    case_ids = {
+        int(test_case["id"])
+        for bundle in bundles.values()
+        for test_case in bundle["test_cases"]
+    }
+    try:
+        plan_memberships = client.test_case_plan_memberships(sorted(case_ids))
+    except ADOClientError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    for story in stories:
+        story_id = str(story["id"])
+        bundle = bundles.get(story_id)
+        if bundle is None:
+            continue
+        try:
+            live_record = load_live_story(
+                story_id,
+                client=client,
+                story_bundle=bundle,
+                plan_memberships=plan_memberships,
+            )
+            state = run_generate(
+                {"story_id": story_id, "live": True, "live_record": live_record}
+            )
+            record_success(
+                state["story_id"],
+                state["token_count"],
+                state["narrative_latency_ms"],
+            )
+        except (
+            ADOClientError,
+            GateError,
+            ContractError,
+            NarrativeError,
+            RenderError,
+            OSError,
+        ) as exc:
+            failures.append((story_id, str(exc)))
+            continue
+        print(state["markdown_path"])
+
+    for story_id, message in failures:
+        print(f"Story {story_id}: {message}", file=sys.stderr)
+    return 1 if failures else 0
 
 
 def _generate(
