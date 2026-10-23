@@ -17,6 +17,7 @@ from pathlib import Path
 
 from story_guard.narrative import (
     ATTEMPTS,
+    PROMPT_TOKEN_TARGET,
     NarrativeError,
     _check_cap,
     _elapsed_ms,
@@ -127,7 +128,7 @@ def _analyze_live(record: dict, progress: Progress | None = None) -> dict:
             "and no fetched tests"
         )
     _notify(progress, started)
-    reviews, findings, token_count, latency_ms = _judge_criteria(
+    reviews, findings, token_count, latency_ms, truncated = _judge_criteria(
         record, criteria, 0, progress, suites
     )
     result = result_from_judgment(
@@ -136,6 +137,8 @@ def _analyze_live(record: dict, progress: Progress | None = None) -> dict:
         token_count=token_count,
         narrative_latency_ms=latency_ms,
     )
+    if truncated:
+        result["score"]["test_suite_truncated"] = True
     _notify(progress, "live review complete: model links checked and score calculated")
     return result
 
@@ -146,26 +149,32 @@ def _judge_criteria(
     index: int,
     progress: Progress | None = None,
     suites: list[tuple[str, str, list[dict]]] | None = None,
-) -> tuple[list[dict], list[str], int, int]:
+) -> tuple[list[dict], list[str], int, int, bool]:
     """Judge each criterion in sequence without growing the model context."""
     reviews: list[dict] = []
     findings: list[str] = []
     tokens = 0
     latency = 0
+    truncated = False
     suites = suites if suites is not None else _test_suites(record)
     for criterion in criteria[index:]:
-        review, criterion_findings, criterion_tokens, criterion_latency = _judge_suites(
-            record, criterion, suites, progress
-        )
+        (
+            review,
+            criterion_findings,
+            criterion_tokens,
+            criterion_latency,
+            criterion_truncated,
+        ) = _judge_suites(record, criterion, suites, progress)
         reviews.append(review)
         findings.extend(criterion_findings)
         tokens += criterion_tokens
         latency += criterion_latency
+        truncated = truncated or criterion_truncated
         _notify(
             progress,
             f"completed {criterion.get('ac_id', 'AC')}: {len(review.get('mapped_test_ids') or [])} predicted test links",
         )
-    return reviews, findings, tokens, latency
+    return reviews, findings, tokens, latency, truncated
 
 
 def _judge_suites(
@@ -173,7 +182,7 @@ def _judge_suites(
     criterion: dict,
     suites: list[tuple[str, str, list[dict]]],
     progress: Progress | None = None,
-) -> tuple[dict, list[str], int, int]:
+) -> tuple[dict, list[str], int, int, bool]:
     """Judge this criterion against every suite batch and merge the evidence."""
     ac_id = str(criterion.get("ac_id") or "")
     ids: list[str] = []
@@ -182,8 +191,14 @@ def _judge_suites(
     votes: dict[str, list[str]] = {}
     tokens = 0
     latency = 0
+    truncated = False
     statuses: list[str] = []
-    passes = _review_passes(record, criterion, suites)
+    bounded_suites = []
+    for suite_id, suite_name, tests in suites:
+        kept, cut = _bound_suite_tests(tests)
+        truncated = truncated or cut
+        bounded_suites.append((suite_id, suite_name, kept))
+    passes = _review_passes(record, criterion, bounded_suites)
     for batch_index, passed in enumerate(passes, 1):
         (
             suite_id,
@@ -252,6 +267,7 @@ def _judge_suites(
         findings,
         tokens,
         latency,
+        truncated,
     )
 
 
@@ -422,20 +438,50 @@ def _plain_text(value: object) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _step_pairs(test: dict) -> list[dict]:
+    """Action and expected result for one case. A plain steps string has no pairs."""
+    raw = test.get("step_pairs")
+    if not isinstance(raw, list) or not raw:
+        raw = test.get("steps")
+    if not isinstance(raw, list):
+        return []
+    pairs = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        action = _plain_text(item.get("action"))
+        expected = _plain_text(item.get("expected_result"))
+        if action or expected:
+            pairs.append({"action": action, "expected_result": expected})
+    return pairs
+
+
 def _test_evidence(test: dict) -> str:
-    """Title, description, steps, and parameters. The full text, not a prefix."""
+    """Title, description, action, expected result, and parameters."""
     sections = []
     title = _plain_text(test.get("title"))
     if title:
         sections.append(f"Title: {title}")
-    for label, key in (
-        ("Description", "description"),
-        ("Steps", "steps"),
-        ("Parameters", "parameters"),
-    ):
-        value = _plain_text(test.get(key))
-        if value:
-            sections.append(f"{label}: {value}")
+    description = _plain_text(test.get("description"))
+    if description:
+        sections.append(f"Description: {description}")
+    pairs = _step_pairs(test)
+    if pairs:
+        lines = []
+        for pair in pairs:
+            if pair["action"]:
+                lines.append(f"Action: {pair['action']}")
+            if pair["expected_result"]:
+                lines.append(f"Expected result: {pair['expected_result']}")
+        if lines:
+            sections.append("Steps:\n" + "\n".join(lines))
+    else:
+        steps = _plain_text(test.get("steps"))
+        if steps:
+            sections.append(f"Steps: {steps}")
+    parameters = _plain_text(test.get("parameters"))
+    if parameters:
+        sections.append(f"Parameters: {parameters}")
     return "\n".join(sections)
 
 
@@ -444,6 +490,7 @@ def _test_part_rows(test: dict) -> list[dict]:
     evidence = _test_evidence(test)
     parts = _text_parts(evidence) or [""]
     total = len(parts)
+    pairs = _step_pairs(test)
     rows = []
     for index, part in enumerate(parts, 1):
         rows.append(
@@ -453,9 +500,80 @@ def _test_part_rows(test: dict) -> list[dict]:
                 "part": index,
                 "parts": total,
                 "text": part,
+                # The structured steps travel with the first part. Later parts
+                # already contain the cut of that same text.
+                "steps": pairs if index == 1 else [],
             }
         )
     return rows
+
+
+def _pair_tokens(cases: list[dict]) -> int:
+    """Conservative token estimate for the tests inside one pair payload."""
+    rows = []
+    for case in cases:
+        rows.extend(_test_part_rows(case))
+    payload = json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
+    return (len(payload) + 2) // 3
+
+
+def _case_has_steps(case: dict) -> bool:
+    return bool(_step_pairs(case) or _plain_text(case.get("steps")))
+
+
+def _shorten_case(case: dict) -> dict:
+    """Halve step and description text. A case with no steps stays empty."""
+    copied = dict(case)
+    pairs = _step_pairs(copied)
+    if pairs:
+        shortened = []
+        for pair in pairs:
+            action = pair["action"][: max(0, len(pair["action"]) // 2)]
+            expected = pair["expected_result"][: max(0, len(pair["expected_result"]) // 2)]
+            if action or expected:
+                shortened.append({"action": action, "expected_result": expected})
+        copied["step_pairs"] = shortened
+    steps = copied.get("steps")
+    if isinstance(steps, str) and steps:
+        copied["steps"] = steps[: max(0, len(steps) // 2)]
+    description = copied.get("description")
+    if isinstance(description, str) and description:
+        copied["description"] = description[: max(0, len(description) // 2)]
+    return copied
+
+
+def _bound_suite_tests(tests: list) -> tuple[list[dict], bool]:
+    """Drop or cut cases until the pair payload is near the 4,096-token target.
+
+    Cases with no steps are kept until every stepped case has been dropped.
+    The 8,192 generation cap is not involved here.
+    """
+    cases = [test for test in tests if isinstance(test, dict)]
+    if _pair_tokens(cases) <= PROMPT_TOKEN_TARGET:
+        return cases, False
+    removed: set[int] = set()
+
+    def remaining() -> list[dict]:
+        return [case for index, case in enumerate(cases) if index not in removed]
+
+    order = [index for index in range(len(cases) - 1, -1, -1) if _case_has_steps(cases[index])]
+    order.extend(
+        index for index in range(len(cases) - 1, -1, -1) if not _case_has_steps(cases[index])
+    )
+    for index in order:
+        if _pair_tokens(remaining()) <= PROMPT_TOKEN_TARGET:
+            break
+        if len(cases) - len(removed) <= 1:
+            break
+        removed.add(index)
+    kept = [dict(case) for case in remaining()]
+    while kept and _pair_tokens(kept) > PROMPT_TOKEN_TARGET:
+        longest = max(range(len(kept)), key=lambda index: _pair_tokens([kept[index]]))
+        before = _pair_tokens(kept)
+        kept[longest] = _shorten_case(kept[longest])
+        if _pair_tokens(kept) >= before:
+            break
+    return kept, True
 
 
 def _pack_rows(rows: list[dict]) -> list[list[dict]]:

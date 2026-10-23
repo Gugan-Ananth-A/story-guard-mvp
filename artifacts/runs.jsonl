@@ -77,3 +77,5 @@
 {"requested":["121213"],"written":[],"skipped":["121213"]}
 {"story_id":"121213","token_count":355553,"narrative_latency_ms":4998055,"prefix_sha256":"ecfef680eb580d900f3c9669476b85a244464dba410581756ea0c22dbe3b1fcd"}
 {"requested":["121213"],"written":["121213"],"skipped":[]}
+{"story_id":"123086","token_count":16097,"narrative_latency_ms":215360,"prefix_sha256":"ecfef680eb580d900f3c9669476b85a244464dba410581756ea0c22dbe3b1fcd"}
+{"requested":["123086"],"written":["123086"],"skipped":[]}

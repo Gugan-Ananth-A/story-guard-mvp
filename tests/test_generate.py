@@ -933,6 +933,17 @@ def test_batch_forms_write_each_story_without_overlapping_calls(
     for story_id in expected:
         assert (tmp_path / f"{story_id}.md").is_file()
         assert (tmp_path / f"{story_id}.pdf").is_file()
+    if len(expected) < 2:
+        sprint_name = None
+    elif "--sprint" in argv:
+        sprint_name = "sprint-ecom-mvp-phase.pdf"
+    else:
+        sprint_name = "sprint-" + "-".join(expected) + ".pdf"
+    if sprint_name is None:
+        assert not any(path.name.startswith("sprint-") for path in tmp_path.iterdir())
+    else:
+        assert (tmp_path / sprint_name).is_file()
+    assert not (tmp_path / "rollup.pdf").exists()
     capsys.readouterr()
 
 
@@ -1259,8 +1270,9 @@ def test_two_story_run_writes_two_pdfs_and_a_rollup_of_those_ids(tmp_path, monke
 
     assert (tmp_path / "51001.pdf").is_file()
     assert (tmp_path / "51002.pdf").is_file()
-    rollup = tmp_path / "rollup.pdf"
+    rollup = tmp_path / "sprint-51001-51002.pdf"
     assert rollup.is_file()
+    assert not (tmp_path / "rollup.pdf").exists()
     first_page = _pdf_page_texts(rollup.read_bytes())[0]
     assert set(re.findall(r"\b\d{5,}\b", first_page)) == {"51001", "51002"}
     assert "121213" not in first_page
@@ -1291,7 +1303,7 @@ def test_failed_story_is_on_the_skipped_list_and_has_no_pdf(tmp_path, monkeypatc
     assert (tmp_path / "51001.pdf").is_file()
     assert not (tmp_path / "51002.pdf").exists()
     assert not (tmp_path / "51002.md").exists()
-    pages = _pdf_page_texts((tmp_path / "rollup.pdf").read_bytes())
+    pages = _pdf_page_texts((tmp_path / "sprint-51001-51002.pdf").read_bytes())
     assert "51002" in pages[0]
     assert "Skipped:" in pages[0]
     assert all("51002" not in page for page in pages[1:])

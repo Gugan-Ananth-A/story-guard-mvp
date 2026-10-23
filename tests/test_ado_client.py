@@ -378,7 +378,7 @@ class ADOClientTests(unittest.TestCase):
         with patch.dict("os.environ", {}, clear=True):
             results = client.fetch_many_stories([10, 20, 30, 50, 40])
 
-        self.assertEqual([result["id"] for result in results], ["10", "20", "50", "40"])
+        self.assertEqual([result["id"] for result in results], ["10", "20", "30", "50", "40"])
         self.assertEqual(results[0]["story"]["title"], "Login story")
         self.assertEqual([bug["id"] for bug in results[0]["bugs"]], ["301"])
         self.assertEqual(results[0]["bugs"][0]["linked_story_id"], "10")
@@ -390,8 +390,10 @@ class ADOClientTests(unittest.TestCase):
             [{"action": "Enter valid credentials", "expected_result": "Dashboard is shown"}],
         )
         self.assertEqual(results[1]["error"]["code"], "not_found")
+        self.assertEqual(results[2]["id"], "30")
         self.assertEqual(results[2]["error"]["code"], "not_user_story")
-        self.assertEqual(results[3]["story"]["title"], "Following story")
+        self.assertEqual(results[3]["error"]["code"], "not_user_story")
+        self.assertEqual(results[4]["story"]["title"], "Following story")
         self.assertTrue(all(request.get_method() == "GET" for request in requests))
         self.assertEqual(
             [int(urlsplit(request.full_url).path.rsplit("/", 1)[-1]) for request in requests],
@@ -479,7 +481,12 @@ class ADOClientTests(unittest.TestCase):
         self.assertEqual(loaded["tests"][0]["type"], "")
         self.assertEqual(loaded["tests"][0]["mapped_ac_ids"], [])
         self.assertEqual(loaded["tests"][0]["steps"], "Click Login")
+        self.assertEqual(
+            loaded["tests"][0]["step_pairs"],
+            [{"action": "Click Login", "expected_result": ""}],
+        )
         self.assertEqual(loaded["tests"][1]["steps"], "")
+        self.assertEqual(loaded["tests"][1]["step_pairs"], [])
         self.assertEqual(loaded["tests"][0]["suite_id"], "121215")
         self.assertEqual(loaded["tests"][0]["plan_id"], "121214")
         self.assertEqual(loaded["bugs"], [])
@@ -955,6 +962,13 @@ class ADOClientTests(unittest.TestCase):
         self.assertIn("Enter email", case["steps"])
         self.assertIn("Email is accepted", case["steps"])
         self.assertIn("Open the login page", case["steps"])
+        self.assertEqual(
+            case["step_pairs"],
+            [
+                {"action": "Enter email", "expected_result": "Email is accepted"},
+                {"action": "Open the login page", "expected_result": ""},
+            ],
+        )
         self.assertIn("Admin login", case["description"])
         self.assertIn("Shared setup", case["description"])
         self.assertIn("admin@example.com", case["parameters"])

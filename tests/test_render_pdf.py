@@ -323,6 +323,8 @@ def test_live_mapper_prompt_preserves_generic_output_contract() -> None:
         '"coverage_status"',
         '"quality"',
         '"finding"',
+        '"depth"',
+        '"gap"',
     ):
         assert field in prompt
     assert "as happy, negative, or adhoc" in prompt

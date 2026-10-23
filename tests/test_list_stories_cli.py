@@ -115,10 +115,11 @@ def test_fetch_story_and_bug_writes_no_fixtures_or_artifacts(
 
     captured = capsys.readouterr()
     records = json.loads(captured.out)
-    assert result == 0
-    assert len(records) == 1
+    assert result == 1
+    assert [record["id"] for record in records] == ["100", "999"]
     assert records[0]["story"]["id"] == "100"
     assert [bug["id"] for bug in records[0]["bugs"]] == ["999"]
+    assert records[1]["error"]["code"] == "not_user_story"
     assert all(request.get_method() == "GET" for request in requests)
     assert [
         int(request.full_url.rsplit("/", 1)[-1].split("?", 1)[0])

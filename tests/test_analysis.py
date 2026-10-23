@@ -193,7 +193,9 @@ def test_ollama_judges_one_criterion_against_one_suite(monkeypatch):
     assert '"coverage_status"' in system
     assert '"quality"' in system
     assert '"finding"' in system
-    assert "Depth and gap are derived by the caller" in system
+    assert "Return depth and gap" in system
+    assert '"depth"' in system
+    assert '"gap"' in system
     assert "How to judge coverage" in system
     assert "one acceptance criterion and one suite" in system
     assert 'Sharing only a generic word such as "login" is not enough.' in system
@@ -813,8 +815,114 @@ def test_long_test_text_is_reviewed_in_parts_and_combined(monkeypatch):
     assert len(seen) >= 2
     assert marker in joined
     assert steps in joined
+    assert result["score"]["test_suite_truncated"] is False
     assert row["mapped_test_ids"] == ["121216"]
     assert "Negative scenarios are covered" in row["depth"]
+
+
+def test_pair_payload_sends_action_and_expected_result_and_bounds_the_suite(monkeypatch):
+    """Action and expected result travel with the pair. A no-step case stays.
+
+    The suite is cut toward the 4,096-token target. The 8,192 cap stays put.
+    """
+    from story_guard import analysis, narrative
+
+    assert analysis.PROMPT_TOKEN_TARGET == 4096
+    assert narrative.PROMPT_TOKEN_TARGET == 4096
+    assert narrative.NUM_CTX == 8192
+    assert narrative.MAX_TOKENS == 8192
+    assert analysis._TEST_TEXT_CHARS == 1200
+
+    def fake_chat(messages, num_predict=8192):
+        payload = json.loads(messages[1]["content"].split("\n", 1)[1])
+        seen.append(payload["tests"])
+        ac_id = payload["acceptance_criterion"]["ac_id"]
+        return {
+            "message": {
+                "content": json.dumps(
+                    {
+                        "ac_id": ac_id,
+                        "mapped_test_ids": [],
+                        "finding": f"No listed test checks {ac_id}.",
+                    }
+                )
+            },
+            "prompt_eval_count": 1,
+            "eval_count": 1,
+        }
+
+    def review(tests):
+        seen.clear()
+        record = _record()
+        record["bugs"] = []
+        record["acceptance_criteria"] = [record["acceptance_criteria"][0]]
+        record["tests"] = tests
+        monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
+        return analyze_live(record)
+
+    seen = []
+    result = review(
+        [
+            {
+                "id": "9001",
+                "title": "Login",
+                "type": "",
+                "suite_id": "S1",
+                "suite_name": "Suite",
+                "steps": "Click Login Dashboard opens",
+                "step_pairs": [
+                    {"action": "Click Login", "expected_result": "Dashboard opens"}
+                ],
+            },
+            {
+                "id": "9002",
+                "title": "Empty case",
+                "type": "",
+                "suite_id": "S1",
+                "suite_name": "Suite",
+                "steps": "",
+            },
+        ]
+    )
+    sent = [row for batch in seen for row in batch]
+    stepped = next(row for row in sent if row["id"] == "9001")
+    assert stepped["steps"] == [
+        {"action": "Click Login", "expected_result": "Dashboard opens"}
+    ]
+    assert "Action: Click Login" in stepped["text"]
+    assert "Expected result: Dashboard opens" in stepped["text"]
+    assert any(row["id"] == "9002" for row in sent)
+    assert result["score"]["test_suite_truncated"] is False
+
+    monkeypatch.setattr("story_guard.analysis.PROMPT_TOKEN_TARGET", 40)
+    bounded = review(
+        [
+            {
+                "id": "stepped",
+                "title": "Long case",
+                "type": "",
+                "suite_id": "S1",
+                "suite_name": "Suite",
+                "step_pairs": [
+                    {"action": "A" * 500, "expected_result": "B" * 500}
+                ],
+            },
+            {
+                "id": "plain",
+                "title": "No steps",
+                "type": "",
+                "suite_id": "S1",
+                "suite_name": "Suite",
+                "steps": "",
+            },
+        ]
+    )
+    sent_ids = {row["id"] for batch in seen for row in batch}
+    assert "plain" in sent_ids
+    assert "stepped" not in sent_ids
+    assert bounded["score"]["test_suite_truncated"] is True
+    assert narrative.NUM_CTX == 8192
+    assert narrative.MAX_TOKENS == 8192
 
 
 def test_story_description_is_sent_in_parts(monkeypatch):

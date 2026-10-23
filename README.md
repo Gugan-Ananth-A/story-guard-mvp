@@ -61,9 +61,10 @@ and JSON output mode. Leave `STORY_GUARD_LLM=ollama` to keep using Qwen locally.
 including fetch, contract validation, each AC/suite review, retries, and report
 rendering, is flushed to stderr with a `[story-guard]` prefix.
 
-A run of two or more stories also writes `artifacts/rollup.pdf`. Page one lists
-only the stories in that run. A story that fails is marked skipped on that page
-and does not get its own PDF.
+A sprint or a run of two or more stories also writes `artifacts/sprint-<slug>.pdf`
+beside the per-story files. The slug is the iteration path, or the story ids
+when the run is not a sprint. Page one lists only the stories in that run. A
+story that fails is marked skipped on that page and does not get its own PDF.
 
 ## Sprint PDF
 

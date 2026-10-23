@@ -168,6 +168,36 @@ def _plain_steps(value: object) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _element_text(element: object) -> str:
+    raw = "".join(getattr(element, "itertext", lambda: [])())
+    return " ".join(re.sub(r"<[^>]*>", " ", unescape(raw)).split())
+
+
+def _step_pairs_from_xml(value: object) -> List[Dict[str, str]]:
+    """Keep each step's action and expected result. Odd markup stays as an action."""
+    if not isinstance(value, str) or not value.strip():
+        return []
+    from xml.etree import ElementTree
+
+    try:
+        root = ElementTree.fromstring(value)
+    except ElementTree.ParseError:
+        plain = _plain_steps(value)
+        return [{"action": plain, "expected_result": ""}] if plain else []
+    pairs = []
+    for step in root.findall(".//step"):
+        values = step.findall("parameterizedString")
+        if len(values) >= 2:
+            action = _element_text(values[0])
+            expected = _element_text(values[1])
+        else:
+            action = _element_text(step)
+            expected = ""
+        if action or expected:
+            pairs.append({"action": action, "expected_result": expected})
+    return pairs
+
+
 def _shared_step_ids(value: str) -> List[int]:
     """Work item ids referenced by shared-step tags. The order is the document order."""
     found: List[int] = []
@@ -659,6 +689,7 @@ class ADOClient:
             case_id = str(case.get("id") or "")
             if not case_id.isdigit():
                 case["steps"] = ""
+                case["step_pairs"] = []
                 case["description"] = ""
                 case["parameters"] = ""
                 continue
@@ -666,16 +697,20 @@ class ADOClient:
                 item = self.get_work_item(int(case_id))
             except WorkItemNotFoundError:
                 case["steps"] = ""
+                case["step_pairs"] = []
                 case["description"] = ""
                 case["parameters"] = ""
                 continue
-            steps, description, parameters = self._case_text(item, {int(case_id)})
+            steps, description, parameters, pairs = self._case_text(item, {int(case_id)})
             case["steps"] = steps
+            case["step_pairs"] = pairs
             case["description"] = description
             case["parameters"] = parameters
 
-    def _case_text(self, item: Dict[str, Any], seen: set[int]) -> tuple[str, str, str]:
-        """Return steps, description, and parameters, with shared steps expanded."""
+    def _case_text(
+        self, item: Dict[str, Any], seen: set[int]
+    ) -> tuple[str, str, str, List[Dict[str, str]]]:
+        """Return steps, description, parameters, and action/expected pairs."""
         fields = item.get("fields") if isinstance(item, dict) else None
         if not isinstance(fields, dict):
             fields = {}
@@ -683,6 +718,7 @@ class ADOClient:
         if not isinstance(raw_steps, str):
             raw_steps = ""
         steps = _plain_steps(raw_steps)
+        pairs = _step_pairs_from_xml(raw_steps)
         description = _plain_steps(fields.get("System.Description"))
         parameters = _plain_steps(fields.get("Microsoft.VSTS.TCM.LocalDataSource"))
         named = _plain_steps(fields.get("Microsoft.VSTS.TCM.Parameters"))
@@ -696,14 +732,20 @@ class ADOClient:
                 shared = self.get_work_item(shared_id)
             except WorkItemNotFoundError:
                 continue
-            shared_steps, shared_description, shared_parameters = self._case_text(shared, seen)
+            (
+                shared_steps,
+                shared_description,
+                shared_parameters,
+                shared_pairs,
+            ) = self._case_text(shared, seen)
             if shared_steps:
                 steps = f"{steps} {shared_steps}".strip()
+            pairs.extend(shared_pairs)
             if shared_description:
                 description = f"{description} {shared_description}".strip()
             if shared_parameters:
                 parameters = f"{parameters} {shared_parameters}".strip()
-        return steps, description, parameters
+        return steps, description, parameters, pairs
 
     def _cases_in_plan(self, plan_id: int, suite_id: Optional[int] = None) -> List[Dict[str, Any]]:
         suites = self._plan_suites(plan_id)
@@ -801,9 +843,6 @@ class ADOClient:
                 payload = self._get_work_item_payload(
                     story_id, expand_relations=True
                 )
-                fields = payload.get("fields")
-                if isinstance(fields, dict) and fields.get("System.WorkItemType") == "Bug":
-                    continue
                 story = map_ado_work_item(payload)
             except WorkItemNotFoundError as error:
                 results.append(

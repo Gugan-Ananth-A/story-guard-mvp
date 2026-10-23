@@ -238,7 +238,7 @@ def _generate_sprint(iteration_path: str) -> int:
 
     for story_id, message in failures:
         print(f"Story {story_id}: {message}", file=sys.stderr)
-    rollup_ok = _write_run_rollup(entries)
+    rollup_ok = _write_run_rollup(entries, iteration_path)
     return 1 if failures or not rollup_ok else 0
 
 
@@ -305,7 +305,8 @@ def _generate(
         record_batch(requested, written, skipped)
     except OSError as exc:
         print(f"batch trace was not written: {exc}", file=sys.stderr)
-    if not _write_run_rollup(entries):
+    slug = sprint_path if sprint_path else "-".join(requested)
+    if not _write_run_rollup(entries, slug):
         failed = True
     return 1 if failed else 0
 
@@ -397,8 +398,8 @@ def _rollup_entry(story_id: str, state: dict | None, error: str) -> dict:
     }
 
 
-def _write_run_rollup(entries: list[dict]) -> bool:
-    """Write one rollup for a run of two or more stories. Page one is that run only."""
+def _write_run_rollup(entries: list[dict], slug: str) -> bool:
+    """Write sprint-<slug>.pdf for a sprint or a run of two or more stories."""
     if len(entries) < 2:
         return True
     if not any(isinstance(entry.get("score"), dict) for entry in entries):
@@ -406,11 +407,12 @@ def _write_run_rollup(entries: list[dict]) -> bool:
     # Look this up at call time so a test patch on graph.artifacts_dir applies.
     from story_guard.graph import artifacts_dir as current_artifacts_dir
 
-    output_path = current_artifacts_dir() / "rollup.pdf"
+    safe = _safe_slug(slug) or "run"
+    output_path = current_artifacts_dir() / f"sprint-{safe}.pdf"
     try:
         render_sprint_pdf(entries, _template_path(), output_path)
     except (OSError, ValueError, KeyError, TypeError, RenderError) as error:
-        print(f"rollup PDF failed: {error}", file=sys.stderr)
+        print(f"sprint PDF failed: {error}", file=sys.stderr)
         return False
     print(output_path)
     return True

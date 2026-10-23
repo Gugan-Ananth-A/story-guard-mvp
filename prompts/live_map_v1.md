@@ -12,6 +12,8 @@ Return one JSON object and nothing else. Do not use a Markdown fence or call too
     "testable": true,
     "issues": []
   },
+  "depth": "which paths are present",
+  "gap": "what is still missing",
   "finding": "One sentence describing the evidence and any unmet expected result."
 }
 
@@ -34,7 +36,7 @@ How to judge coverage. This call is one acceptance criterion and one suite batch
 - Assess AC quality independently of test coverage. quality.status must be good, needs_improvement, or poor. Use good when the behavior and observable expected result are clear and pass/fail testable. Use needs_improvement for ambiguity or an incomplete expected result. Use poor when the criterion is not meaningfully testable. Keep issues short.
 - Use the ac_id exactly as written. Copy mapped test IDs exactly from the supplied tests. Use an empty mapped_test_ids list when no test provides evidence. Do not invent a test id. Do not name a test id in the finding unless it is also in mapped_test_ids.
 - Write exactly one finding sentence, grounded in the supplied criterion and tests.
-- Depth and gap are derived by the caller from mapped tests and their types; do not add response fields for them.
+- Return depth and gap. Depth names the path that is present. Gap names what is missing. Keep each one to at most eight words.
 - Do not use a percent sign.
 - Do not write the phrase "partially covered".
 - Coverage does not change health. Do not set a health label in this answer.
