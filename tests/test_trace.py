@@ -34,11 +34,20 @@ def _generate(monkeypatch, tmp_path):
     assert main(["generate", "--story-id", "121213"]) == 0
 
 
-def _line(tmp_path) -> dict:
+def _rows(tmp_path) -> list[dict]:
     text = (tmp_path / "runs.jsonl").read_text(encoding="utf-8")
-    rows = [json.loads(row) for row in text.splitlines() if row.strip()]
-    assert len(rows) == 1
-    return rows[0]
+    return [json.loads(row) for row in text.splitlines() if row.strip()]
+
+
+def _line(tmp_path) -> dict:
+    rows = _rows(tmp_path)
+    story = [row for row in rows if "story_id" in row]
+    batch = [row for row in rows if "requested" in row]
+    assert len(story) == 1
+    assert batch == [
+        {"requested": ["121213"], "written": ["121213"], "skipped": []}
+    ]
+    return story[0]
 
 
 @pytest.mark.parametrize("key", [None, "", "   "])
@@ -99,6 +108,7 @@ def test_langsmith_failure_still_completes(monkeypatch, tmp_path, capsys):
     _generate(monkeypatch, tmp_path)
     assert _line(tmp_path)["story_id"] == "121213"
     assert (tmp_path / "121213.md").is_file()
+    assert (tmp_path / "121213.pdf").is_file()
     captured = capsys.readouterr()
     assert "test-key" not in captured.err
     assert "not sent" in captured.err
@@ -141,6 +151,22 @@ def test_send_trace_posts_one_run_without_the_key_in_the_body(monkeypatch):
     assert body["inputs"] == {"story_id": "121213"}
     assert body["outputs"]["token_count"] == 40
     assert "test-key" not in json.dumps(body)
+
+
+def test_jsonl_failure_leaves_the_pdf(monkeypatch, tmp_path, capsys):
+    def boom(_path, _line):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("story_guard.trace._append_jsonl", boom)
+    _generate(monkeypatch, tmp_path)
+    assert (tmp_path / "121213.pdf").is_file()
+    assert (tmp_path / "121213.pdf").stat().st_size > 0
+    assert (tmp_path / "121213.md").is_file()
+    assert not (tmp_path / "runs.jsonl").exists()
+    captured = capsys.readouterr()
+    assert "disk full" in captured.err
+    assert str(tmp_path / "121213.md") in captured.out
+    assert "test-key" not in captured.err
 
 
 def test_two_successes_append_two_lines(tmp_path, monkeypatch):

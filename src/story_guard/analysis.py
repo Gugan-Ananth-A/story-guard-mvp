@@ -9,6 +9,7 @@ not used as a shortcut for live analysis.
 
 import json
 import re
+import threading
 import time
 from collections.abc import Callable
 
@@ -19,7 +20,9 @@ from story_guard.narrative import (
     _elapsed_ms,
     _load_response_json,
     _token_count,
+    name_story,
     ollama_chat,
+    story_failure,
 )
 from story_guard.score import (
     coverage_row,
@@ -42,6 +45,7 @@ _PRIORITY = re.compile(r"\bP([1-4])\b", re.IGNORECASE)
 _QUALITY_LEVELS = {"good", "needs_improvement", "poor"}
 _COVERAGE_STATUSES = {"adequate", "partial", "none"}
 _TEST_TYPES = {"happy", "negative", "edge", "security", "adhoc"}
+_KEPT_TYPES = {"happy", "negative", "adhoc"}
 _PROMPT = """You review one acceptance criterion against the test cases in one suite batch. Each request contains one acceptance criterion and one suite batch; the caller repeats this for every suite. The user message is the only source of facts.
 
 Return one JSON object and nothing else. Do not use a Markdown fence. Do not call tools.
@@ -63,6 +67,7 @@ How to judge coverage. This call is one acceptance criterion and one suite batch
 - A test may be listed only when its title checks the same behavior and the same expected result. Sharing a word such as "login" is not enough.
 - The test type field is a hint. An empty type does not block a match; classify a matched test rather than treating the empty field as evidence of a match.
 - For every mapped test whose type is empty, classify it in test_types from its title and steps. Do not change a non-empty source type.
+- A type is kept only when it is happy, negative, or adhoc. Use happy for a positive case. Any other type is dropped.
 - Existing source links are intentionally not supplied. Decide the mapping from the criterion and the test evidence in this message.
 - When no test checks this criterion, mapped_test_ids is empty. The finding says that no listed test checks it.
 - coverage_status is your assessment of this batch only. It must be adequate, partial, or none. Use adequate only when the named tests check the behavior and expected result; use partial when they check only part; use none when no test matches.
@@ -74,6 +79,8 @@ How to judge coverage. This call is one acceptance criterion and one suite batch
 """
 
 Progress = Callable[[str], None]
+# One resident model. A second live-review call waits until the first returns.
+_MODEL_CALL = threading.Lock()
 
 
 def _notify(progress: Progress | None, message: str) -> None:
@@ -90,14 +97,29 @@ def _notify(progress: Progress | None, message: str) -> None:
 
 def analyze_live(record: dict, progress: Progress | None = None) -> dict:
     """Review every criterion against every test suite, then combine the results."""
+    try:
+        return _analyze_live(record, progress)
+    except NarrativeError as exc:
+        story_id = str(record.get("id") or "") if isinstance(record, dict) else ""
+        raise name_story(story_id, exc) from exc
+
+
+def _analyze_live(record: dict, progress: Progress | None = None) -> dict:
     if not isinstance(record, dict):
         raise NarrativeError("story record is not an object")
     criteria = _criteria_to_judge(record)
     suites = _test_suite_batches(record)
-    _notify(
-        progress,
-        f"live review started: {len(criteria)} acceptance criteria across {len(suites)} suite batches",
-    )
+    if suites:
+        started = (
+            f"live review started: {len(criteria)} acceptance criteria "
+            f"across {len(suites)} suite batches"
+        )
+    else:
+        started = (
+            f"live review started: {len(criteria)} acceptance criteria "
+            "and no fetched tests"
+        )
+    _notify(progress, started)
     reviews, findings, token_count, latency_ms = _judge_criteria(
         record, criteria, 0, progress, suites
     )
@@ -222,11 +244,14 @@ def _judge_pair(
             messages.append({"role": "user", "content": correction})
         started = time.perf_counter()
         try:
-            response = ollama_chat(messages, num_predict=budget)
+            with _MODEL_CALL:
+                response = ollama_chat(messages, num_predict=budget)
             _check_cap(response)
             body = _load_response_json(response, "analysis")
             pair = _require_pair(body, criterion, tests)
         except NarrativeError as exc:
+            if story_failure(exc):
+                raise
             latency_ms += _elapsed_ms(started)
             last_error = exc
             _notify(
@@ -315,10 +340,7 @@ def _test_suite_batches(record: dict) -> list[tuple[str, str, list[dict]]]:
             current_chars += size
         if current:
             batches.append((suite_id, suite_name, current))
-    if not batches:
-        # A missing test pack still gets an AC-quality review. The empty suite
-        # makes the absence of coverage explicit without inventing a case.
-        return [("tests", "No test suite", [])]
+    # No fetched tests means no model call. The scorer still builds none rows.
     return batches
 
 
@@ -383,7 +405,7 @@ def _require_pair(body: dict, criterion: dict, tests: list[dict]) -> dict:
             test_type = str(raw_type or "").strip().lower()
             if test_type == "positive":
                 test_type = "happy"
-            if test_id in known and test_type in _TEST_TYPES:
+            if test_id in ids and test_type in _KEPT_TYPES:
                 test_types[test_id] = test_type
     coverage_status = str(body.get("coverage_status") or "").strip().lower().replace(" ", "_")
     if coverage_status not in _COVERAGE_STATUSES:
@@ -598,6 +620,9 @@ def _score_from_judgment(record: dict, judgment: dict) -> dict:
         if isinstance(test, dict):
             known_tests.add(str(test.get("id") or ""))
     factual = score_health(record)
+    # SR-2 health comes from the open bugs. A model health label is not copied.
+    health = factual["health"]
+    health_band = factual["health_band"]
     reviews = _reviews_by_id(judgment.get("reviews"), known_tests)
     scored_tests = _tests_with_predicted_types(record, reviews)
     factual["coverage_by_type"] = _coverage_by_type(scored_tests)
@@ -642,6 +667,9 @@ def _score_from_judgment(record: dict, judgment: dict) -> dict:
         for row in rows
         if row.get("ac_quality", {}).get("status") in {"needs_improvement", "poor"}
     )
+    factual["health"] = health
+    factual["health_band"] = health_band
+    factual.pop("test_coverage_percent", None)
     return factual
 
 
@@ -670,7 +698,7 @@ def _reviews_by_id(reviews: object, known_tests: set[str]) -> dict[str, dict]:
                 test_type = str(raw_type or "").strip().lower()
                 if test_type == "positive":
                     test_type = "happy"
-                if test_id in known_tests and test_type in _TEST_TYPES:
+                if test_id in ids and test_type in _KEPT_TYPES:
                     test_types[test_id] = test_type
         found[ac_id] = {
             **review,
@@ -697,7 +725,7 @@ def _tests_with_predicted_types(record: dict, reviews: dict[str, dict]) -> list[
         row = dict(test)
         if not str(row.get("type") or "").strip():
             test_type = predicted.get(str(row.get("id") or ""))
-            if test_type in _TEST_TYPES:
+            if test_type in _KEPT_TYPES:
                 row["type"] = test_type
         tests.append(row)
     return tests

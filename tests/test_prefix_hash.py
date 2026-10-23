@@ -77,7 +77,13 @@ def test_two_generate_runs_record_the_same_prefix_hash(tmp_path, monkeypatch, ca
     capsys.readouterr()
 
     lines = [json.loads(line) for line in (tmp_path / "runs.jsonl").read_text(encoding="utf-8").splitlines()]
-    assert len(lines) == 2
-    assert lines[0]["prefix_sha256"] == lines[1]["prefix_sha256"]
-    assert lines[0]["prefix_sha256"] == hashlib.sha256(load_prefix().encode("utf-8")).hexdigest()
+    story_lines = [line for line in lines if "story_id" in line]
+    batch_lines = [line for line in lines if "requested" in line]
+    assert len(story_lines) == 2
+    assert story_lines[0]["prefix_sha256"] == story_lines[1]["prefix_sha256"]
+    assert story_lines[0]["prefix_sha256"] == hashlib.sha256(load_prefix().encode("utf-8")).hexdigest()
+    assert batch_lines == [
+        {"requested": ["121213"], "written": ["121213"], "skipped": []},
+        {"requested": ["121213"], "written": ["121213"], "skipped": []},
+    ]
     assert "121213" not in load_prefix()

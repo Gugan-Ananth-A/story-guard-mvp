@@ -10,6 +10,7 @@ from story_guard import narrative
 from story_guard.narrative import (
     NarrativeError,
     _load_response_json,
+    keep_only_model,
     ollama_chat,
     write_narrative,
 )
@@ -224,7 +225,7 @@ def test_token_cap_retries_then_keeps_a_short_reply(monkeypatch):
     assert result["narrative"]["headline"] == "No open bugs"
 
 
-def test_second_timeout_raises(tmp_path, monkeypatch):
+def test_generation_over_180_seconds_fails_the_story(tmp_path, monkeypatch):
     calls = []
 
     def post(payload):
@@ -237,11 +238,23 @@ def test_second_timeout_raises(tmp_path, monkeypatch):
 
     monkeypatch.setattr("story_guard.narrative._post", post)
     out = tmp_path / "report.pdf"
-    with pytest.raises(NarrativeError):
+    with pytest.raises(NarrativeError, match="story fixture-story"):
         write_narrative(_score())
-    assert len(calls) == narrative.ATTEMPTS
-    assert len({json.dumps(payload, sort_keys=True) for payload in calls}) == 1
+    assert len(calls) == 1
     assert not out.exists()
+
+
+def test_ollama_down_fails_the_story_without_a_retry(monkeypatch):
+    calls = {"n": 0}
+
+    def post(payload):
+        calls["n"] += 1
+        raise NarrativeError("ollama request failed: connection refused")
+
+    monkeypatch.setattr("story_guard.narrative._post", post)
+    with pytest.raises(NarrativeError, match="story fixture-story"):
+        write_narrative(_score())
+    assert calls["n"] == 1
 
 
 def test_cold_start_is_outside_the_generation_cap(monkeypatch):
@@ -411,3 +424,88 @@ def test_deepseek_chat_requires_an_api_key(monkeypatch):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     with pytest.raises(NarrativeError, match="DEEPSEEK_API_KEY"):
         ollama_chat([{"role": "user", "content": "Return JSON."}])
+
+
+class _OllamaBody:
+    def __init__(self, raw: bytes):
+        self._raw = raw
+
+    def read(self, _n=-1):
+        return self._raw
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+
+def test_keep_only_model_unloads_every_model_except_qwen35_4b(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "ollama")
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen3.5:4b")
+    seen = []
+
+    def fake_urlopen(request, timeout):
+        seen.append((request.full_url, request.get_method(), request.data))
+        if request.full_url.endswith("/api/ps"):
+            raw = json.dumps(
+                {
+                    "models": [
+                        {"name": "qwen3.5:9b"},
+                        {"name": "qwen3.5:4b"},
+                        {"model": "phi4-mini"},
+                    ]
+                }
+            ).encode("utf-8")
+            return _OllamaBody(raw)
+        return _OllamaBody(b'{"done": true}')
+
+    monkeypatch.setattr("story_guard.narrative.urllib.request.urlopen", fake_urlopen)
+    keep_only_model()
+
+    assert not any("pull" in url for url, _method, _data in seen)
+    posts = [
+        (url, json.loads(data.decode("utf-8")))
+        for url, method, data in seen
+        if method == "POST" and data is not None
+    ]
+    assert posts == [
+        (seen[1][0], {"model": "qwen3.5:9b", "keep_alive": 0}),
+        (seen[2][0], {"model": "phi4-mini", "keep_alive": 0}),
+    ]
+    assert all(url.endswith("/api/generate") for url, _body in posts)
+    assert seen[0][0].endswith("/api/ps")
+    assert seen[0][1] == "GET"
+    assert "/api/pull" not in inspect.getsource(narrative)
+
+
+def test_keep_only_model_leaves_a_resident_qwen35_4b(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "ollama")
+    monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+    seen = []
+
+    def fake_urlopen(request, timeout):
+        seen.append(request.get_method())
+        raw = json.dumps({"models": [{"name": "qwen3.5:4b"}]}).encode("utf-8")
+        return _OllamaBody(raw)
+
+    monkeypatch.setattr("story_guard.narrative.urllib.request.urlopen", fake_urlopen)
+    keep_only_model()
+    assert seen == ["GET"]
+
+
+def test_keep_only_model_skips_a_hosted_provider(monkeypatch):
+    monkeypatch.setenv("STORY_GUARD_LLM", "deepseek")
+
+    def fail(*_args, **_kwargs):
+        raise AssertionError("ollama was called")
+
+    monkeypatch.setattr("story_guard.narrative.urllib.request.urlopen", fail)
+    keep_only_model()
+
+
+def test_keep_only_model_ignores_an_unreachable_host(monkeypatch, capsys):
+    monkeypatch.delenv("STORY_GUARD_LLM", raising=False)
+    monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:9")
+    keep_only_model()
+    assert capsys.readouterr().err == ""

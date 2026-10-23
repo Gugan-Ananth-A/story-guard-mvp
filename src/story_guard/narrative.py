@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -38,8 +39,32 @@ class NarrativeError(Exception):
 ATTEMPTS = 4
 
 
+def story_failure(exc: BaseException) -> bool:
+    """Provider outage and the generation cap stop the story. Bad JSON does not."""
+    text = str(exc).casefold()
+    if "request failed" in text:
+        return True
+    return f"exceeded {GENERATION_TIMEOUT_S} seconds of generation" in text
+
+
+def name_story(story_id: str, exc: NarrativeError) -> NarrativeError:
+    """Attach the story id when the failure text does not already name it."""
+    text = str(exc).strip()
+    if not story_id or story_id in text:
+        return exc
+    return NarrativeError(f"story {story_id}: {text}", retry_hint=exc.retry_hint)
+
+
 def write_narrative(score: dict) -> dict:
     """Call the configured provider until the attempt budget is spent."""
+    try:
+        return _write_narrative(score)
+    except NarrativeError as exc:
+        story_id = str(score.get("story_id") or "") if isinstance(score, dict) else ""
+        raise name_story(story_id, exc) from exc
+
+
+def _write_narrative(score: dict) -> dict:
     if not isinstance(score, dict):
         raise NarrativeError("score is not an object")
     last_error: NarrativeError | None = None
@@ -53,6 +78,8 @@ def write_narrative(score: dict) -> dict:
             _check_cap(response)
             narrative = _parse_narrative(response, score)
         except NarrativeError as exc:
+            if story_failure(exc):
+                raise
             latency_ms += _elapsed_ms(started)
             last_error = exc
             # A malformed response is itself useful feedback for the next
@@ -361,6 +388,70 @@ def _deepseek_post(payload: dict, key: str) -> dict:
         raise NarrativeError("deepseek response was not valid JSON") from exc
     if not isinstance(body, dict):
         raise NarrativeError("deepseek response was not an object")
+    return body
+
+
+def keep_only_model() -> None:
+    """Unload every resident Ollama model other than the one this process calls.
+
+    The default resident model is qwen3.5:4b. This does not pull a model.
+    An unreachable Ollama host is ignored; the chat call reports that failure.
+    """
+    if _llm_provider() != "ollama":
+        return
+    resident = _model()
+    try:
+        loaded = _loaded_model_names()
+    except OSError:
+        return
+    for name in loaded:
+        if name == resident:
+            continue
+        try:
+            _unload_model(name)
+        except OSError:
+            print(f"could not unload {name}", file=sys.stderr)
+
+
+def _loaded_model_names() -> list[str]:
+    body = _ollama_json(f"{_host()}/api/ps", None, 5)
+    models = body.get("models")
+    if not isinstance(models, list):
+        return []
+    names: list[str] = []
+    for item in models:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name") or item.get("model")
+        if isinstance(name, str) and name.strip():
+            names.append(name.strip())
+    return names
+
+
+def _unload_model(name: str) -> None:
+    """Ask Ollama to drop one resident model. keep_alive 0 does not pull it."""
+    _ollama_json(
+        f"{_host()}/api/generate",
+        {"model": name, "keep_alive": 0},
+        10,
+    )
+
+
+def _ollama_json(url: str, payload: dict | None, timeout: float) -> dict:
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="GET" if data is None else "POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = json.load(response)
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+        raise OSError(str(exc)) from exc
+    if not isinstance(body, dict):
+        raise OSError("ollama response was not an object")
     return body
 
 

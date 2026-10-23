@@ -447,6 +447,43 @@ class ADOClient:
             "Link its test plan to the story, or pass that plan id."
         )
 
+    def story_ids_for_iteration(self, iteration_path: str) -> List[str]:
+        """Return User Story ids on one iteration path.
+
+        WIQL is a read query. This POST does not update a work item.
+        """
+        path = iteration_path.strip()
+        if path == "":
+            raise ADORequestError("iteration path is blank")
+        escaped = path.replace("'", "''")
+        query = (
+            "SELECT [System.Id] FROM WorkItems "
+            "WHERE [System.WorkItemType] = 'User Story' "
+            f"AND [System.IterationPath] = '{escaped}' "
+            "ORDER BY [System.Id]"
+        )
+        payload = self._post_json(
+            f"{self.project_url}/_apis/wit/wiql?api-version=7.1",
+            {"query": query},
+        )
+        items = payload.get("workItems")
+        if not isinstance(items, list):
+            raise ADOResponseError("ADO sprint query is missing its work item list")
+        ids: List[str] = []
+        seen = set()
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            item_id = item.get("id")
+            if isinstance(item_id, bool) or not isinstance(item_id, int) or item_id <= 0:
+                continue
+            key = str(item_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            ids.append(key)
+        return ids
+
     def fetch_test_cases(
         self,
         plan_ids: List[int],
@@ -531,13 +568,30 @@ class ADOClient:
         return cases
 
     def _get_json(self, url: str, work_item_id: Optional[int] = None) -> Dict[str, Any]:
+        return self._request_json(url, work_item_id=work_item_id)
+
+    def _post_json(self, url: str, body: Dict[str, Any]) -> Dict[str, Any]:
+        return self._request_json(url, body=body)
+
+    def _request_json(
+        self,
+        url: str,
+        body: Optional[Dict[str, Any]] = None,
+        work_item_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
         credentials = base64.b64encode(f":{self.pat}".encode("utf-8")).decode("ascii")
+        data = None if body is None else json.dumps(body).encode("utf-8")
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Basic {credentials}",
+        }
+        if data is not None:
+            headers["Content-Type"] = "application/json"
         request = Request(
             url,
-            headers={
-                "Accept": "application/json",
-                "Authorization": f"Basic {credentials}",
-            },
+            data=data,
+            headers=headers,
+            method="GET" if data is None else "POST",
         )
         try:
             with self.opener(request, timeout=self.timeout) as response:
