@@ -185,6 +185,15 @@ def test_ollama_judges_one_criterion_against_one_suite(monkeypatch):
     assert "Valid login" in user
     assert "Bad password" in user
     assert "122590" not in user
+    assert "Mapping rules:" in system
+    assert "only the supplied test suite batch" in system
+    assert "A shared word between a criterion and a test is not evidence" in system
+    assert "mapped_test_ids" in system
+    assert '"test_types"' in system
+    assert '"coverage_status"' in system
+    assert '"quality"' in system
+    assert '"finding"' in system
+    assert "Depth and gap are derived by the caller" in system
     assert "How to judge coverage" in system
     assert "one acceptance criterion and one suite" in system
     assert 'Sharing only a generic word such as "login" is not enough.' in system

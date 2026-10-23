@@ -13,6 +13,7 @@ import re
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 from story_guard.narrative import (
     ATTEMPTS,
@@ -45,40 +46,8 @@ _QUALITY_LEVELS = {"good", "needs_improvement", "poor"}
 _COVERAGE_STATUSES = {"adequate", "partial", "none"}
 _TEST_TYPES = {"happy", "negative", "edge", "security", "adhoc"}
 _KEPT_TYPES = {"happy", "negative", "adhoc"}
-_PROMPT = """You review one acceptance criterion against the test cases in one suite batch. Each request contains one acceptance criterion and one suite batch; the caller repeats this for every suite and for every text part. The user message is the only source of facts.
-
-Return one JSON object and nothing else. Do not use a Markdown fence. Do not call tools.
-{
-  "ac_id": "the id copied from the acceptance criterion",
-  "mapped_test_ids": ["test ids copied from this suite"],
-  "test_types": {"test id": "scenario type"},
-  "coverage_status": "adequate",
-  "quality": {
-    "status": "good",
-    "testable": true,
-    "issues": ["short issue, or [] when clear"]
-  },
-  "finding": "one sentence on what the named tests check and what is still missing"
-}
-
-How to judge coverage. This call is one acceptance criterion and one suite batch.
-- Read that criterion's text, including the expected result. A story description part is context for that criterion. Do not map a test for behavior that this criterion does not require.
-- A test may be listed when its title, description, steps, or parameters check this criterion's behavior. Also list a negative or adhoc case of that same behavior, including the opposite result and the edge variants. Sharing only a generic word such as "login" is not enough.
-- Each test text may be one part of a longer case. Judge this part on its own. Other parts are reviewed in other calls and the caller combines them.
-- The test type field is a hint. An empty type does not block a match; classify a matched test rather than treating the empty field as evidence of a match.
-- A title token such as -P01, -N04, or -A06 is the path label. P is happy, N is negative, and A is adhoc. Put that label in test_types.
-- When this criterion's expected result is itself a failure, label one case that proves that result as happy, and label another failure-path case negative when one is listed.
-- For every mapped test whose type is empty and whose title has no P, N, or A token, classify it in test_types from the title, description, steps, and parameters in this part. Do not change a source type that is already happy, negative, or adhoc.
-- A type is kept only when it is happy, negative, or adhoc. Use happy for a positive case. Use negative for a security case. Use adhoc for an edge case.
-- Existing source links are intentionally not supplied. Decide the mapping from the criterion and the test evidence in this message.
-- When no test checks this criterion, mapped_test_ids is empty. The finding says that no listed test checks it.
-- coverage_status is your assessment of this batch only. It must be adequate, partial, or none. Use adequate only when the named tests check the behavior and expected result; use partial when they check only part; use none when no test matches.
-- Assess AC quality independently of test coverage. quality.status must be good, needs_improvement, or poor. Use good when the behavior and observable expected result are clear and pass/fail testable. Use needs_improvement for ambiguity or an incomplete expected result. Use poor when the criterion is not meaningfully testable. Keep issues short.
-- Use the ac_id exactly as written. Do not invent a test id. Do not name a test id in the finding unless it is also in mapped_test_ids.
-- Do not use a percent sign.
-- Do not write the phrase "partially covered".
-- Coverage does not change health. Do not set story health in this answer.
-"""
+_PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / "live_map_v1.md"
+_PROMPT = _PROMPT_PATH.read_text(encoding="utf-8")
 
 _NEGATIVE_HINT = re.compile(
     r"\b(?:invalid|incorrect|unregistered|failed|empty|unauthorized|denied|rejected|error|forbidden|bad)\b"

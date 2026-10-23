@@ -1,0 +1,114 @@
+{
+  "story_id": "121213",
+  "title": "SNAP Login Screen",
+  "source": "fixture",
+  "ac_field": "empty",
+  "scenario_count": 8,
+  "scenarios": [
+    {
+      "ac_id": "AC-1",
+      "covered": false,
+      "mapped_test_ids": [],
+      "depth": "None",
+      "gap": "No coverage",
+      "row_status": "none",
+      "buckets_present": 0
+    },
+    {
+      "ac_id": "AC-2",
+      "covered": false,
+      "mapped_test_ids": [],
+      "depth": "None",
+      "gap": "No coverage",
+      "row_status": "none",
+      "buckets_present": 0
+    },
+    {
+      "ac_id": "AC-3",
+      "covered": false,
+      "mapped_test_ids": [],
+      "depth": "None",
+      "gap": "No coverage",
+      "row_status": "none",
+      "buckets_present": 0
+    },
+    {
+      "ac_id": "AC-4",
+      "covered": false,
+      "mapped_test_ids": [],
+      "depth": "None",
+      "gap": "No coverage",
+      "row_status": "none",
+      "buckets_present": 0
+    },
+    {
+      "ac_id": "AC-5",
+      "covered": false,
+      "mapped_test_ids": [],
+      "depth": "None",
+      "gap": "No coverage",
+      "row_status": "none",
+      "buckets_present": 0
+    },
+    {
+      "ac_id": "AC-6",
+      "covered": false,
+      "mapped_test_ids": [],
+      "depth": "None",
+      "gap": "No coverage",
+      "row_status": "none",
+      "buckets_present": 0
+    },
+    {
+      "ac_id": "AC-7",
+      "covered": false,
+      "mapped_test_ids": [],
+      "depth": "None",
+      "gap": "No coverage",
+      "row_status": "none",
+      "buckets_present": 0
+    },
+    {
+      "ac_id": "AC-8",
+      "covered": false,
+      "mapped_test_ids": [],
+      "depth": "None",
+      "gap": "No coverage",
+      "row_status": "none",
+      "buckets_present": 0
+    }
+  ],
+  "test_count": 18,
+  "mapped_count": 0,
+  "bug_count": 0,
+  "open_bug_count": 0,
+  "escaped_bug_count": 0,
+  "open_bugs_by_priority": {
+    "P1": 0,
+    "P2": 0,
+    "P3": 0,
+    "P4": 0
+  },
+  "adequate_count": 0,
+  "partial_count": 0,
+  "none_count": 8,
+  "rag": "Red",
+  "bugs": [],
+  "coverage_by_type": {
+    "happy": 0,
+    "negative": 0,
+    "edge": 0,
+    "security": 0,
+    "adhoc": 0,
+    "unset": 18
+  },
+  "health": "No open bugs",
+  "health_band": "No open bugs",
+  "rule_ids": [
+    "SR-1",
+    "SR-2",
+    "SR-3"
+  ],
+  "note": "AC-2, AC-3, and AC-8 say the Login button stays disabled when a required field is empty. Tests 121217, 121218, and 121219 say the tester clicks Login and sees inline validation. This note records that contradiction. It is not a mapping.",
+  "generated_at": "2026-10-21T09:00:00Z"
+}

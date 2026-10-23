@@ -61,6 +61,26 @@ and JSON output mode. Leave `STORY_GUARD_LLM=ollama` to keep using Qwen locally.
 including fetch, contract validation, each AC/suite review, retries, and report
 rendering, is flushed to stderr with a `[story-guard]` prefix.
 
+## Sprint PDF
+
+Build an offline multi-story PDF from score JSON files with repeatable
+`--score-file` arguments. The first page is a run-local rollup; successful
+scores follow as their standard single-story reports. Unreadable or incomplete
+score files are identified as skipped on the rollup and do not receive detail
+pages. No ADO request, PAT, or narrative model call is used by this command.
+
+```bash
+story-guard sprint \
+	--score-file tests/data/score-one.json \
+	--score-file tests/data/score-two.json \
+	--slug 2026-10-21
+```
+
+The output is `artifacts/sprint-2026-10-21.pdf` (or the configured
+`STORY_GUARD_ARTIFACTS_DIR`). The slug is lowercased, non-alphanumeric runs
+become hyphens, and the result is capped at 64 characters before it is used as
+a filename component. Input order determines rollup row and detail-page order.
+
 ## Trace
 
 `LANGSMITH_API_KEY` is optional. The PDF is produced without it. A successful `story-guard generate` appends one line to `artifacts/runs.jsonl` with the story id, the narrative token count, and the narrative latency. When the key is set, that run is also sent to LangSmith. The key is read from the environment. It is not written into the report or the jsonl line.
