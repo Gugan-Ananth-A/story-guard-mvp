@@ -1196,3 +1196,190 @@ def test_missing_template_writes_no_file(tmp_path):
         render_markdown({}, {"headline": "x"}, tmp_path / "missing.md", out)
     assert not out.exists()
     assert not (tmp_path / "121213.pdf").exists()
+
+
+_PACKING_CRITERION = (
+    "Print the packing slip. "
+    "The warehouse prints a packing slip before the courier collects the parcel."
+)
+
+
+def _packing_story(story_id: str, title: str, tests: list | None = None) -> dict:
+    """A story whose criterion text is outside the SNAP login behavior table."""
+    return {
+        "id": story_id,
+        "title": title,
+        "type": "User Story",
+        "state": "New",
+        "description": "",
+        "area": "Warehouse",
+        "iteration": "Warehouse\\Sprint",
+        "raw_ac_text": (
+            "Scenario: AC-01 Print the packing slip\n"
+            "Expected: The warehouse prints a packing slip before the courier collects the parcel."
+        ),
+        "tests": [] if tests is None else tests,
+        "bugs": [],
+    }
+
+
+def _batch_rows(artifact_dir: Path) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in (artifact_dir / "runs.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def test_two_story_run_writes_two_pdfs_and_a_rollup_of_those_ids(tmp_path, monkeypatch, capsys):
+    import re
+
+    from story_guard.ado_client import ADOClient
+    from tests.test_render_pdf import _pdf_page_texts
+
+    stories = {
+        "51001": _packing_story("51001", "Packing slip"),
+        "51002": _packing_story("51002", "Courier handoff"),
+    }
+
+    class FakeADOClient:
+        def load_live_story(self, story_id, test_plan_id=None):
+            return stories[str(story_id)]
+
+    monkeypatch.setattr(ADOClient, "from_env", classmethod(lambda cls: FakeADOClient()))
+    monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
+    monkeypatch.setattr("story_guard.cli.keep_only_model", lambda: None)
+    monkeypatch.setattr(
+        "story_guard.analysis.ollama_chat",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("model call")),
+    )
+    monkeypatch.setenv("LANGSMITH_API_KEY", "")
+
+    assert main(["generate", "--story-id", "51001", "--story-id", "51002", "--live"]) == 0
+
+    assert (tmp_path / "51001.pdf").is_file()
+    assert (tmp_path / "51002.pdf").is_file()
+    rollup = tmp_path / "rollup.pdf"
+    assert rollup.is_file()
+    first_page = _pdf_page_texts(rollup.read_bytes())[0]
+    assert set(re.findall(r"\b\d{5,}\b", first_page)) == {"51001", "51002"}
+    assert "121213" not in first_page
+    capsys.readouterr()
+
+
+def test_failed_story_is_on_the_skipped_list_and_has_no_pdf(tmp_path, monkeypatch, capsys):
+    from story_guard.ado_client import ADOClient, ADOClientError
+    from tests.test_render_pdf import _pdf_page_texts
+
+    class FakeADOClient:
+        def load_live_story(self, story_id, test_plan_id=None):
+            if str(story_id) == "51002":
+                raise ADOClientError("work item missing")
+            return _packing_story("51001", "Packing slip")
+
+    monkeypatch.setattr(ADOClient, "from_env", classmethod(lambda cls: FakeADOClient()))
+    monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
+    monkeypatch.setattr("story_guard.cli.keep_only_model", lambda: None)
+    monkeypatch.setattr(
+        "story_guard.analysis.ollama_chat",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("model call")),
+    )
+    monkeypatch.setenv("LANGSMITH_API_KEY", "")
+
+    assert main(["generate", "--story-id", "51001", "--story-id", "51002", "--live"]) == 1
+
+    assert (tmp_path / "51001.pdf").is_file()
+    assert not (tmp_path / "51002.pdf").exists()
+    assert not (tmp_path / "51002.md").exists()
+    pages = _pdf_page_texts((tmp_path / "rollup.pdf").read_bytes())
+    assert "51002" in pages[0]
+    assert "Skipped:" in pages[0]
+    assert all("51002" not in page for page in pages[1:])
+    assert _batch_rows(tmp_path)[-1] == {
+        "requested": ["51001", "51002"],
+        "written": ["51001"],
+        "skipped": ["51002"],
+    }
+    capsys.readouterr()
+
+
+def test_live_coverage_comes_from_model_judgment_not_snap_links(tmp_path, monkeypatch):
+    from pypdf import PdfReader
+
+    from story_guard import graph
+    from story_guard.ado_client import ADOClient
+    from story_guard.score import apply_behavior_links, behavior_tests
+
+    assert behavior_tests(_PACKING_CRITERION) == []
+    calls = []
+
+    def spy(criteria, tests):
+        calls.append(criteria)
+        return apply_behavior_links(criteria, tests)
+
+    monkeypatch.setattr("story_guard.score.apply_behavior_links", spy)
+    known = "88001"
+    unknown = ("121216", "999001")
+    case = _case(known, "Print the packing slip for the parcel")
+    case["suite_id"] = "88000"
+    case["suite_name"] = "Warehouse cases"
+    case["plan_id"] = "88010"
+    story = _packing_story("88011", "Packing slip", tests=[case])
+    captured = {}
+    original_render = graph.render_pdf
+
+    def capture(state):
+        captured["score"] = state["score"]
+        return original_render(state)
+
+    def fake_chat(messages, num_predict=8192):
+        payload = json.loads(messages[1]["content"].split("\n", 1)[1])
+        ac_id = payload["acceptance_criterion"]["ac_id"]
+        return {
+            "message": {
+                "content": json.dumps(
+                    {
+                        "ac_id": ac_id,
+                        "mapped_test_ids": [known, *unknown],
+                        "test_types": {
+                            known: "happy",
+                            unknown[0]: "happy",
+                            unknown[1]: "negative",
+                        },
+                        "coverage_status": "partial",
+                        "quality": {"status": "good", "testable": True, "issues": []},
+                        "finding": (
+                            f"{ac_id} is checked by {known}, {unknown[0]}, and {unknown[1]}."
+                        ),
+                    }
+                )
+            },
+            "prompt_eval_count": 2,
+            "eval_count": 3,
+        }
+
+    class FakeADOClient:
+        def load_live_story(self, story_id, test_plan_id=None):
+            assert str(story_id) == "88011"
+            return story
+
+    monkeypatch.setattr(graph, "render_pdf", capture)
+    monkeypatch.setattr(ADOClient, "from_env", classmethod(lambda cls: FakeADOClient()))
+    monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
+    monkeypatch.setattr("story_guard.cli.keep_only_model", lambda: None)
+    monkeypatch.setattr("story_guard.analysis.ollama_chat", fake_chat)
+    monkeypatch.setenv("LANGSMITH_API_KEY", "")
+
+    assert main(["generate", "--story-id", "88011", "--live"]) == 0
+
+    assert calls == []
+    row = captured["score"]["scenarios"][0]
+    assert row["ac_id"] == "AC-01"
+    assert row["mapped_test_ids"] == [known]
+    assert row["depth"] == "Positive scenarios are covered"
+    pdf_text = "\n".join(
+        page.extract_text() or "" for page in PdfReader(tmp_path / "88011.pdf").pages
+    )
+    for invented in unknown:
+        assert invented not in pdf_text
+    assert "Positive scenarios are covered" in pdf_text
