@@ -65,7 +65,7 @@ Nothing is written back to Azure DevOps.
 
 A sprint is an Azure DevOps iteration path, matched exactly on `System.IterationPath`. The query is read-only WIQL for work items whose type is User Story, ordered by id.
 
-`generate --sprint "<path>" --live` resolves those ids, then runs the live story pipeline above once per id. There is no sprint score, no combined coverage percent, and no portfolio page. Each story gets `artifacts/<story-id>.md` and `artifacts/<story-id>.pdf`. Stories run one after another. The command exits 1 if any story fails.
+`generate --sprint "<path>" --live` resolves those ids, then runs the live story pipeline above once per id. Each story gets `artifacts/<story-id>.md` and `artifacts/<story-id>.pdf`. A run of two or more stories also writes `artifacts/rollup.pdf`. Page one lists only the stories in that run. A story that fails is marked skipped on that page and has no PDF of its own. There is still no single sprint score and no combined coverage percent. Stories run one after another. The command exits 1 if any story fails.
 
 `generate --sprint "<path>"` without `--live` still calls the live reviewer, but the fetch is different:
 

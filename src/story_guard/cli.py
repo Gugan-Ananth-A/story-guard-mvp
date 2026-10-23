@@ -192,10 +192,16 @@ def _generate_sprint(iteration_path: str) -> int:
         print(str(exc), file=sys.stderr)
         return 1
 
+    entries: list[dict] = []
     for story in unique_stories:
         story_id = str(story["id"])
         bundle = bundles.get(story_id)
         if bundle is None:
+            reason = next(
+                (message for failed_id, message in failures if failed_id == story_id),
+                "could not fetch story",
+            )
+            entries.append(_rollup_entry(story_id, None, reason))
             continue
         try:
             live_record = load_live_story(
@@ -225,12 +231,15 @@ def _generate_sprint(iteration_path: str) -> int:
             OSError,
         ) as exc:
             failures.append((story_id, str(exc)))
+            entries.append(_rollup_entry(story_id, None, str(exc)))
             continue
         print(state["markdown_path"])
+        entries.append(_rollup_entry(story_id, state, ""))
 
     for story_id, message in failures:
         print(f"Story {story_id}: {message}", file=sys.stderr)
-    return 1 if failures else 0
+    rollup_ok = _write_run_rollup(entries)
+    return 1 if failures or not rollup_ok else 0
 
 
 def _generate(
@@ -279,20 +288,25 @@ def _generate(
         flush=True,
     )
     written: list[str] = []
+    entries: list[dict] = []
     failed = False
     # A plan id is rejected above unless this batch is exactly one story.
     plan_for_story = test_plan_id if len(requested) == 1 else ""
     # Stories run one at a time, so their Ollama calls do not overlap.
     for story_id in requested:
-        if _generate_one(story_id, live, plan_for_story):
-            written.append(story_id)
-        else:
+        state, error = _generate_one(story_id, live, plan_for_story)
+        if state is None:
             failed = True
+        else:
+            written.append(story_id)
+        entries.append(_rollup_entry(story_id, state, error))
     skipped = [story_id for story_id in requested if story_id not in set(written)]
     try:
         record_batch(requested, written, skipped)
     except OSError as exc:
         print(f"batch trace was not written: {exc}", file=sys.stderr)
+    if not _write_run_rollup(entries):
+        failed = True
     return 1 if failed else 0
 
 
@@ -335,7 +349,7 @@ def _named(story_id: str, exc: BaseException) -> str:
     return f"story {story_id}: {text}"
 
 
-def _generate_one(story_id: str, live: bool, test_plan_id: str = "") -> bool:
+def _generate_one(story_id: str, live: bool, test_plan_id: str = "") -> tuple[dict | None, str]:
     from story_guard.ado_client import ADOClientError
 
     def progress(message: str) -> None:
@@ -350,8 +364,9 @@ def _generate_one(story_id: str, live: bool, test_plan_id: str = "") -> bool:
     try:
         state = run_generate(state_in)
     except (GateError, ContractError, NarrativeError, RenderError, ADOClientError) as exc:
-        print(_named(story_id, exc), file=sys.stderr)
-        return False
+        message = _named(story_id, exc)
+        print(message, file=sys.stderr)
+        return None, message
     try:
         record_success(
             state["story_id"],
@@ -362,6 +377,42 @@ def _generate_one(story_id: str, live: bool, test_plan_id: str = "") -> bool:
         # The Markdown and PDF are already on disk. A trace failure leaves them.
         print(_named(story_id, exc), file=sys.stderr)
     print(state["markdown_path"])
+    return state, ""
+
+
+def _rollup_entry(story_id: str, state: dict | None, error: str) -> dict:
+    """One rollup row. A story without a score stays on the skipped list."""
+    if isinstance(state, dict) and isinstance(state.get("score"), dict):
+        narrative = state.get("narrative")
+        record = state.get("record")
+        return {
+            "score": state["score"],
+            "narrative": narrative if isinstance(narrative, dict) else {},
+            "record": record if isinstance(record, dict) else None,
+        }
+    return {
+        "story_id": story_id,
+        "title": f"Story {story_id}",
+        "skip_reason": error or "not processed",
+    }
+
+
+def _write_run_rollup(entries: list[dict]) -> bool:
+    """Write one rollup for a run of two or more stories. Page one is that run only."""
+    if len(entries) < 2:
+        return True
+    if not any(isinstance(entry.get("score"), dict) for entry in entries):
+        return True
+    # Look this up at call time so a test patch on graph.artifacts_dir applies.
+    from story_guard.graph import artifacts_dir as current_artifacts_dir
+
+    output_path = current_artifacts_dir() / "rollup.pdf"
+    try:
+        render_sprint_pdf(entries, _template_path(), output_path)
+    except (OSError, ValueError, KeyError, TypeError, RenderError) as error:
+        print(f"rollup PDF failed: {error}", file=sys.stderr)
+        return False
+    print(output_path)
     return True
 
 

@@ -57,9 +57,13 @@ The project `.env` replaces a shell value for `STORY_GUARD_LLM`, `STORY_GUARD_MO
 The DeepSeek path uses its `/chat/completions` endpoint, bearer authentication,
 and JSON output mode. Leave `STORY_GUARD_LLM=ollama` to keep using Qwen locally. Ollama still reads `OLLAMA_MODEL`, and `STORY_GUARD_MODEL` overrides that too.
 
-`story-guard generate` keeps stdout limited to the final Markdown path. Progress,
+`story-guard generate` keeps stdout limited to the Markdown paths. Progress,
 including fetch, contract validation, each AC/suite review, retries, and report
 rendering, is flushed to stderr with a `[story-guard]` prefix.
+
+A run of two or more stories also writes `artifacts/rollup.pdf`. Page one lists
+only the stories in that run. A story that fails is marked skipped on that page
+and does not get its own PDF.
 
 ## Sprint PDF
 
