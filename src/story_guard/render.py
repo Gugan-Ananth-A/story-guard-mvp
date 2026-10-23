@@ -120,6 +120,7 @@ _EIGHT_SECTION_FIELDS = {
     "title",
     "generated_at",
     "source",
+    "validation_messages",
     "overall_rag",
     "headline",
     "ac_review",
@@ -428,6 +429,40 @@ def _template_values(
             score.get("generated_at")
             or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         )
+    validation_messages = [
+        str(item)
+        for item in (score.get("validation_messages") or [])
+        if str(item).strip()
+    ]
+    security_findings = [
+        str(item)
+        for item in (score.get("security_findings") or [])
+        if str(item).strip()
+    ]
+    notices = [
+        *validation_messages,
+        *(f"Security review: {finding}" for finding in security_findings),
+    ]
+    if score.get("record_status") == "not_found":
+        return {
+            "report_title": "Story Health Report",
+            "story_id": str(story_id),
+            "title": "",
+            "generated_at": "",
+            "source": "",
+            "validation_messages": "\n".join(validation_messages),
+            "overall_rag": "",
+            "headline": "",
+            "ac_review": "",
+            "ac_test_mapping": "",
+            "coverage_by_type": "",
+            "bugs": "",
+            "recommended_actions": "",
+            "raw_story_ids": "",
+            "raw_ac_ids": "",
+            "raw_test_ids": "",
+            "raw_bug_ids": "",
+        }
     scored_scenarios = score.get("scenarios", scenario_rows)
     if "story" not in score and isinstance(record, dict):
         display_scenarios = scored_criteria(record)
@@ -457,7 +492,48 @@ def _template_values(
         mapping_lines.append(
             f"{ac_id}: linked tests {', '.join(map(str, links)) if links else 'None'}"
         )
-    coverage_lines = [
+    if validation_messages:
+        coverage_value = score.get("average_testcase_coverage", 0)
+        try:
+            coverage_percent = float(coverage_value)
+        except (TypeError, ValueError):
+            coverage_percent = 0
+        coverage_lines_prefix = [f"Avg testcase coverage: {coverage_percent:g}%"]
+        def table_cell(value: object) -> str:
+            return str(value or "").replace("|", "\\|").replace("\n", " ")
+
+        mapping_lines.extend(
+            [
+                "| AC ID | Acceptance Criteria | Linked Test IDs | Coverage depth | Coverage gap |",
+                "| --- | --- | --- | --- | --- |",
+            ]
+        )
+        sources = display_scenarios if isinstance(display_scenarios, list) else []
+        for source_row in sources:
+            if not isinstance(source_row, dict):
+                continue
+            source_id = str(source_row.get("ac_id", ""))
+            scored_row = scored_by_ac.get(source_id, {})
+            if not isinstance(scored_row, dict):
+                scored_row = {}
+            linked = scored_row.get("mapped_test_ids", [])
+            mapping_lines.append(
+                "| "
+                + " | ".join(
+                    table_cell(value)
+                    for value in (
+                        source_id,
+                        source_row.get("text", ""),
+                        ", ".join(map(str, linked)) if isinstance(linked, list) else "",
+                        scored_row.get("depth", ""),
+                        scored_row.get("gap", ""),
+                    )
+                )
+                + " |"
+            )
+    else:
+        coverage_lines_prefix = []
+    coverage_lines = coverage_lines_prefix + [
         f"{scenario_count} acceptance criteria | {score.get('adequate_count', 0)} adequately covered | {score.get('partial_count', 0)} with gaps | {score.get('none_count', 0)} not covered",
         f"Total tests: {test_count}",
         f"Tests: {test_count}. Mapped: {mapped_count}. Bugs: {bug_count}.",
@@ -524,6 +600,7 @@ def _template_values(
         "title": str(title),
         "generated_at": generated_at,
         "source": str(source),
+        "validation_messages": "\n".join(notices),
         "overall_rag": f"{rag}\nStory health: {health}\nRules: {rule_text}\n{narrative_prose}",
         "headline": str(headline),
         "ac_review": "\n".join(ac_lines),

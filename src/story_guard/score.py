@@ -32,13 +32,36 @@ def score_health(story_record: dict) -> dict:
     bugs = list(story_record.get("bugs") or [])
     rows, mapped_count = _scenarios(scenarios, tests)
     health, health_band = _health(bugs)
-    note = story_record.get("note")
-    if note is None:
-        note = ""
+    note = story_record.get("note") or ""
+    story_id = str(story_record.get("id", ""))
+    not_found = story_record.get("not_found", False) is True
+    has_story_data = any(
+        str(story_record.get(key) or "").strip()
+        for key in ("title", "description", "acceptance_criteria_raw")
+    ) or bool(story_record.get("acceptance_criteria") or scenarios)
+    validation_messages = list(story_record.get("validation_messages") or [])
+    if not_found:
+        validation_messages.append(
+            f"Userstory ID - “{story_id}” Does not exist."
+        )
+    elif not has_story_data:
+        validation_messages.append(f"Userstory ID - “{story_id}” has no data.")
+    elif not tests:
+        validation_messages.append(f"Userstory ID - “{story_id}” has no Testcases.")
+    security_findings = list(story_record.get("security_findings") or [])
+    coverage_percent = (
+        round(100 * sum(bool(row["mapped_test_ids"]) for row in rows) / len(rows), 1)
+        if rows and tests
+        else 0
+    )
     return {
-        "story_id": str(story_record.get("id", "")),
+        "story_id": story_id,
         "title": story_record.get("title", ""),
         "source": story_record.get("source", "fixture"),
+        "record_status": "not_found" if not_found else "present" if has_story_data else "no_data",
+        "validation_messages": validation_messages,
+        "security_findings": security_findings,
+        "average_testcase_coverage": coverage_percent,
         "ac_field": _ac_field(story_record),
         "scenario_count": len(scenarios),
         "scenarios": rows,
@@ -471,12 +494,13 @@ def _row(
     types_by_test: dict | None = None,
 ) -> dict:
     if not test_ids:
+        missing = "No Testcases Found" if tests else ""
         return {
             "ac_id": ac_id,
             "covered": False,
             "mapped_test_ids": test_ids,
-            "depth": "None",
-            "gap": "No coverage",
+            "depth": missing,
+            "gap": missing,
             "row_status": "none",
             "buckets_present": 0,
         }

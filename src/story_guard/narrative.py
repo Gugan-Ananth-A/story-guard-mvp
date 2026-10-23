@@ -155,6 +155,11 @@ def _payload(score: dict, correction: str | None = None) -> tuple[dict, dict]:
     return payload, payload_score
 
 
+def _build_payload(score: dict) -> tuple[dict, dict]:
+    """Return the provider request and the score copy sent to the model."""
+    return _payload(score)
+
+
 def _bounded_score(score: dict, prefix: str) -> dict:
     """Trim whole test cases until the prompt is near its 4,096-token target."""
     test_cases = score.get("test_cases")

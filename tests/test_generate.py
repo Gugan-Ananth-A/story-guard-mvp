@@ -178,7 +178,7 @@ def test_score_command_does_not_call_the_model(monkeypatch, capsys):
     capsys.readouterr()
 
 
-@pytest.mark.parametrize("story_id", ["999999", "abc", ""])
+@pytest.mark.parametrize("story_id", ["abc", ""])
 def test_bad_story_id_writes_no_report(tmp_path, monkeypatch, capsys, story_id):
     monkeypatch.setattr("story_guard.graph.artifacts_dir", lambda: tmp_path)
 

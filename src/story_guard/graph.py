@@ -24,6 +24,7 @@ from story_guard.render import (
     validate_template,
 )
 from story_guard.score import score_health as score_record
+from story_guard.security import review_and_redact
 from story_guard.test_adapter import DummyTestAdapterError, fetch_tests
 
 # Keys and the test-type enum are the ones named in fixtures/SCHEMA.md.
@@ -125,8 +126,6 @@ def gate_input(state: GraphState) -> dict:
     live = state.get("live", False)
     if not isinstance(live, bool):
         raise GateError("live flag must be a boolean")
-    if story_id != _ACCEPTED_STORY_ID and not live:
-        raise GateError(f"story id {story_id} is not in the fixture")
     if live and int(story_id) <= 0:
         raise GateError("live story id must be a positive integer")
     plan_id = state.get("test_plan_id")
@@ -145,15 +144,30 @@ def gate_input(state: GraphState) -> dict:
     return gated
 
 
+def _with_security(record: dict) -> dict:
+    """Redact credential-like text before scoring, narrative, or rendering."""
+    sanitized, findings = review_and_redact(record)
+    sanitized["security_findings"] = findings
+    return sanitized
+
+
 def fetch(state: GraphState) -> dict:
+    story_id = state.get("story_id")
     if state.get("live", False):
         preloaded = state.get("live_record")
         if isinstance(preloaded, dict):
-            _notify(state, f"using the preloaded live story {state.get('story_id')}")
-            return {"record": preloaded}
-        _notify(state, f"fetching live story {state.get('story_id')} and test suites")
-        return {"record": _fetch_live(state)}
-    _notify(state, f"loading fixture for story {state.get('story_id')}")
+            _notify(state, f"using the preloaded live story {story_id}")
+            return {"record": _with_security(preloaded)}
+        _notify(state, f"fetching live story {story_id} and test suites")
+        return {"record": _with_security(_fetch_live(state))}
+    if isinstance(story_id, str) and story_id != _ACCEPTED_STORY_ID:
+        _notify(state, f"story {story_id} is not in the fixture")
+        return {
+            "record": _with_security(
+                _empty_story_record(story_id, source="fixture", not_found=True)
+            )
+        }
+    _notify(state, f"loading fixture for story {story_id}")
     path = _repo_root() / "fixtures" / "FIX-121213.json"
     try:
         text = path.read_text(encoding="utf-8")
@@ -174,7 +188,7 @@ def fetch(state: GraphState) -> dict:
         raise ContractError(str(exc)) from exc
     fixture_record["tests"] = _tests_from_adapter(fixture_record.get("tests"), adapter_rows)
     _notify(state, "fixture loaded")
-    return {"record": fixture_record}
+    return {"record": _with_security(fixture_record)}
 
 
 def _fetch_live(state: GraphState) -> dict:
@@ -196,6 +210,19 @@ def _fetch_live(state: GraphState) -> dict:
         state,
         f"fetched {len(record.get('acceptance_criteria') or [])} acceptance criteria, "
         f"{len(record['tests'])} tests, and {len(record['bugs'])} bugs",
+    )
+    return record
+
+
+def _empty_story_record(story_id: str, *, source: str, not_found: bool) -> dict:
+    record = _blank_story_record()
+    record.update(
+        {
+            "id": story_id,
+            "type": "User Story",
+            "source": source,
+            "not_found": not_found,
+        }
     )
     return record
 
@@ -235,6 +262,12 @@ def load_live_story(
         raise ADOResponseError(f"ADO story {story_id} response is invalid")
     if "error" in story_bundle:
         error = story_bundle.get("error")
+        if isinstance(error, dict) and error.get("code") == "not_found":
+            return _empty_story_record(
+                story_id,
+                source="Azure DevOps live data",
+                not_found=True,
+            )
         message = error.get("message") if isinstance(error, dict) else None
         raise ADOResponseError(message or f"Could not load ADO story {story_id}")
 
@@ -437,8 +470,16 @@ def write_narrative(state: GraphState) -> dict:
             "token_count": state.get("token_count", 0),
             "narrative_latency_ms": state.get("narrative_latency_ms", 0),
         }
+    score = state["score"]
+    if isinstance(score, dict) and score.get("record_status") == "not_found":
+        _notify(state, "skipping the narrative because the story was not found")
+        return {
+            "narrative": {"headline": "", "sections": [], "actions": []},
+            "token_count": 0,
+            "narrative_latency_ms": 0,
+        }
     _notify(state, "asking the model for the report narrative")
-    result = request_narrative(state["score"])
+    result = request_narrative(score)
     _notify(state, "narrative accepted")
     # The narrative call may return a bounded copy of the score. Rendering
     # must use that copy so a truncated suite is visible on the report.
@@ -455,7 +496,10 @@ def write_narrative(state: GraphState) -> dict:
 def render_pdf(state: GraphState) -> dict:
     """Write both reports from the same score, narrative, and fixture record."""
     _notify(state, "rendering Markdown and PDF reports")
-    if not state.get("live"):
+    score = state.get("score")
+    if not state.get("live") and not (
+        isinstance(score, dict) and score.get("record_status") == "not_found"
+    ):
         _validate_narrative_counts(state["score"], state["narrative"])
     output_dir = artifacts_dir()
     template = _template_path()

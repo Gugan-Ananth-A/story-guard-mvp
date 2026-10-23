@@ -153,14 +153,28 @@ def _generate_sprint(iteration_path: str) -> int:
         print(f"No User Stories found in {iteration_path}")
         return 0
 
+    unique_stories = []
+    seen_story_ids = set()
+    duplicate_story_ids = set()
+    for story in stories:
+        story_id = str(story["id"])
+        if story_id in seen_story_ids:
+            duplicate_story_ids.add(story_id)
+            continue
+        seen_story_ids.add(story_id)
+        unique_stories.append(story)
+
     bundles = {}
     failures = []
-    for story in stories:
+    for story in unique_stories:
         story_id = str(story["id"])
         try:
             bundle = client.fetch_many_stories([int(story_id)])[0]
             if "error" in bundle:
                 error = bundle["error"]
+                if error.get("code") == "not_found":
+                    bundles[story_id] = bundle
+                    continue
                 message = error.get("message", "could not fetch story")
                 raise ADOClientError(message)
             bundles[story_id] = bundle
@@ -170,7 +184,7 @@ def _generate_sprint(iteration_path: str) -> int:
     case_ids = {
         int(test_case["id"])
         for bundle in bundles.values()
-        for test_case in bundle["test_cases"]
+        for test_case in bundle.get("test_cases", [])
     }
     try:
         plan_memberships = client.test_case_plan_memberships(sorted(case_ids))
@@ -178,7 +192,7 @@ def _generate_sprint(iteration_path: str) -> int:
         print(str(exc), file=sys.stderr)
         return 1
 
-    for story in stories:
+    for story in unique_stories:
         story_id = str(story["id"])
         bundle = bundles.get(story_id)
         if bundle is None:
@@ -190,6 +204,10 @@ def _generate_sprint(iteration_path: str) -> int:
                 story_bundle=bundle,
                 plan_memberships=plan_memberships,
             )
+            if story_id in duplicate_story_ids:
+                live_record.setdefault("validation_messages", []).append(
+                    f"Duplicate Userstory ID - “{story_id}” found"
+                )
             state = run_generate(
                 {"story_id": story_id, "live": True, "live_record": live_record}
             )
