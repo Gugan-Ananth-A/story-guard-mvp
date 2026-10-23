@@ -1,0 +1,323 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 63;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000021 /* StoryGuardApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* StoryGuardApp.swift */; };
+		A10000000000000000000022 /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* SetupView.swift */; };
+		A10000000000000000000023 /* ConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000013 /* ConnectView.swift */; };
+		A10000000000000000000024 /* GenerateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000014 /* GenerateView.swift */; };
+		A10000000000000000000025 /* ReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000015 /* ReportView.swift */; };
+		A10000000000000000000026 /* Installer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000016 /* Installer.swift */; };
+		A10000000000000000000027 /* Runner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000017 /* Runner.swift */; };
+		A10000000000000000000028 /* TokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000018 /* TokenStore.swift */; };
+		A1000000000000000000002C /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001D /* Theme.swift */; };
+		A10000000000000000000029 /* ProgressMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000019 /* ProgressMath.swift */; };
+		A1000000000000000000002A /* Rules.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001A /* Rules.swift */; };
+		A1000000000000000000002B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001B /* Assets.xcassets */; };
+		A10000000000000000000062 /* PDFKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000060 /* PDFKit.framework */; };
+		A10000000000000000000063 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000061 /* Security.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A10000000000000000000011 /* StoryGuardApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoryGuardApp.swift; sourceTree = "<group>"; };
+		A10000000000000000000012 /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
+		A10000000000000000000013 /* ConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectView.swift; sourceTree = "<group>"; };
+		A10000000000000000000014 /* GenerateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerateView.swift; sourceTree = "<group>"; };
+		A10000000000000000000015 /* ReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportView.swift; sourceTree = "<group>"; };
+		A10000000000000000000016 /* Installer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Installer.swift; sourceTree = "<group>"; };
+		A10000000000000000000017 /* Runner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner.swift; sourceTree = "<group>"; };
+		A10000000000000000000018 /* TokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenStore.swift; sourceTree = "<group>"; };
+		A1000000000000000000001D /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		A10000000000000000000019 /* ProgressMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressMath.swift; sourceTree = "<group>"; };
+		A1000000000000000000001A /* Rules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rules.swift; sourceTree = "<group>"; };
+		A1000000000000000000001B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A1000000000000000000001C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A10000000000000000000045 /* StoryGuard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StoryGuard.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000060 /* PDFKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PDFKit.framework; path = System/Library/Frameworks/PDFKit.framework; sourceTree = SDKROOT; };
+		A10000000000000000000061 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000000000000000000042 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000062 /* PDFKit.framework in Frameworks */,
+				A10000000000000000000063 /* Security.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A10000000000000000000030 /* StoryGuard */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000011 /* StoryGuardApp.swift */,
+				A10000000000000000000012 /* SetupView.swift */,
+				A10000000000000000000013 /* ConnectView.swift */,
+				A10000000000000000000014 /* GenerateView.swift */,
+				A10000000000000000000015 /* ReportView.swift */,
+				A10000000000000000000016 /* Installer.swift */,
+				A10000000000000000000017 /* Runner.swift */,
+				A10000000000000000000018 /* TokenStore.swift */,
+				A1000000000000000000001D /* Theme.swift */,
+				A10000000000000000000019 /* ProgressMath.swift */,
+				A1000000000000000000001A /* Rules.swift */,
+				A1000000000000000000001B /* Assets.xcassets */,
+				A1000000000000000000001C /* Info.plist */,
+			);
+			path = StoryGuard;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000031 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000045 /* StoryGuard.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000032 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000060 /* PDFKit.framework */,
+				A10000000000000000000061 /* Security.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000033 = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000030 /* StoryGuard */,
+				A10000000000000000000032 /* Frameworks */,
+				A10000000000000000000031 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10000000000000000000002 /* StoryGuard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000051 /* Build configuration list for PBXNativeTarget "StoryGuard" */;
+			buildPhases = (
+				A10000000000000000000041 /* Sources */,
+				A10000000000000000000042 /* Frameworks */,
+				A10000000000000000000043 /* Resources */,
+				A10000000000000000000044 /* Copy engine and driver */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = StoryGuard;
+			productName = StoryGuard;
+			productReference = A10000000000000000000045 /* StoryGuard.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A10000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 2630;
+			};
+			buildConfigurationList = A10000000000000000000050 /* Build configuration list for PBXProject "StoryGuard" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A10000000000000000000033;
+			productRefGroup = A10000000000000000000031 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A10000000000000000000002 /* StoryGuard */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000043 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000000000000000000002B /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A10000000000000000000044 /* Copy engine and driver */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Copy engine and driver";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "/bin/bash \"${SRCROOT}/copy-resources.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A10000000000000000000041 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000021 /* StoryGuardApp.swift in Sources */,
+				A10000000000000000000022 /* SetupView.swift in Sources */,
+				A10000000000000000000023 /* ConnectView.swift in Sources */,
+				A10000000000000000000024 /* GenerateView.swift in Sources */,
+				A10000000000000000000025 /* ReportView.swift in Sources */,
+				A10000000000000000000026 /* Installer.swift in Sources */,
+				A10000000000000000000027 /* Runner.swift in Sources */,
+				A10000000000000000000028 /* TokenStore.swift in Sources */,
+				A1000000000000000000002C /* Theme.swift in Sources */,
+				A10000000000000000000029 /* ProgressMath.swift in Sources */,
+				A1000000000000000000002A /* Rules.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A10000000000000000000052 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ENABLE_MODULES = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A10000000000000000000053 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ENABLE_MODULES = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		A10000000000000000000054 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGNING_REQUIRED = YES;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = StoryGuard/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Story Guard";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rootquotient.storyguard;
+				PRODUCT_MODULE_NAME = StoryGuard;
+				PRODUCT_NAME = StoryGuard;
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		A10000000000000000000055 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGNING_REQUIRED = YES;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = StoryGuard/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Story Guard";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rootquotient.storyguard;
+				PRODUCT_MODULE_NAME = StoryGuard;
+				PRODUCT_NAME = StoryGuard;
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A10000000000000000000050 /* Build configuration list for PBXProject "StoryGuard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000052 /* Debug */,
+				A10000000000000000000053 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A10000000000000000000051 /* Build configuration list for PBXNativeTarget "StoryGuard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000054 /* Debug */,
+				A10000000000000000000055 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A10000000000000000000001 /* Project object */;
+}

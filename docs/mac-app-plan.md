@@ -1,13 +1,13 @@
 # Story Guard Mac app
 
-Status: plan only. The app is not implemented yet.
+Status: the Mac app builds and runs. First launch installs a private Python, reuses Ollama and qwen3.5:4b when they are already on the Mac, and shows the PDF in the window. The personal access token is stored in a private file, and the progress percent is how many acceptance criteria have been reviewed.
 
 A standalone macOS app that installs its runtime, connects to Azure DevOps, runs the existing local Qwen pipeline, and shows the PDF in the window.
 
 ## What the app does
 
 1. On first launch, install anything that is missing: Python 3.13, the Story Guard package and its libraries, Ollama, and `qwen3.5:4b`.
-2. Ask for Azure DevOps access and store the token in the Keychain.
+2. Ask for an Azure DevOps personal access token and store it in a private file. The connect screen asks for the token only.
 3. Let the user enter one story id, several story ids, or a sprint (an Azure DevOps iteration path).
 4. Run a live generate with local Ollama.
 5. Show a progress percent and the current step.
@@ -19,7 +19,7 @@ The scoring, Azure DevOps reads, model prompts, and ReportLab layout stay in `sr
 
 - Native SwiftUI app, bundle id `com.rootquotient.storyguard`, display name Story Guard. Xcode 26.3 and Swift 6.2 are already on this Mac. PDFKit displays the report.
 - The app is not sandboxed. It has to download runtimes, start Ollama, and talk to `dev.azure.com`. It is ad-hoc signed so it launches locally. It is not notarized.
-- Azure DevOps access is the organization, the project, and a personal access token with Work Items Read. That is what `ADOClient` accepts (`ADO_PROJECT_URL` plus `ADO_PAT`). The token goes in the Keychain and is passed only as an environment variable to the Python process. It is never written into the repo or into `.env`.
+- Azure DevOps access is a personal access token. The organization and project stay `rootquotient` and `Ecom MVP`. The token needs Work Items Read and Test Management Read. It is stored in `~/Library/Application Support/Story Guard/ado-pat` with mode 0600 and passed only as `ADO_PAT` to the Python process. It is never written into the repo, into `.env`, or into a log.
 - A sprint in this product is the iteration path `story-guard sprints` already prints, for example `Ecom MVP\Ecom phase 2.1 release\Story Guard - AI Agent`. The screen lists those paths and also accepts a pasted path.
 - Generate in the app is always live. Fixture scoring stays on the CLI.
 - The model installed by the app is `qwen3.5:4b` only. The 9B weights are too large for this 8 GB Mac, and `phi4-mini` stays the documented fallback, not something the installer pulls.
@@ -33,12 +33,12 @@ macos/
   StoryGuard/
     StoryGuardApp.swift       # window, navigation
     SetupView.swift           # first-run checklist and percent
-    ConnectView.swift         # org, project, token, verify
+    ConnectView.swift         # token, how to create it, verify
     GenerateView.swift        # story / stories / sprint, Generate
     ReportView.swift          # PDFKit viewer, story picker, Download
     Installer.swift           # download, extract, venv, ollama pull
     Runner.swift              # spawn driver.py, stream JSON events
-    KeychainStore.swift
+    TokenStore.swift          # private ado-pat file, mode 0600
     ProgressMath.swift        # percent from driver events
     Assets.xcassets
   driver.py                   # thin CLI bridge, no scoring logic
@@ -56,6 +56,7 @@ engine/          # copy of src/, templates/, prompts/, fixtures/, pyproject.toml
 ollama/          # Ollama.app only when /usr/local/bin/ollama is absent
 artifacts/       # <story-id>.md and <story-id>.pdf
 logs/            # installer and generate logs
+ado-pat          # personal access token, mode 0600, never logged
 ```
 
 `engine/` keeps the repo shape the code already uses. `graph.py`, `prefix.py`, and `envfile.py` resolve templates, the rubric, and fixtures through `Path(__file__).parents[2]`. With `PYTHONPATH=engine/src`, that parent is `engine/`, so templates and `prompts/rubric_v1.md` resolve. There is no `.env` in that folder, so the app's environment variables are what the process sees.
@@ -75,23 +76,17 @@ The pinned Python release and the Ollama download URL are constants in `Installe
 
 Ollama is started only when nothing is listening on `11434`. The app does not install a launch daemon and does not ask for an admin password. This machine already has Ollama 0.34.4 at `/usr/local/bin/ollama`, so a normal launch here skips the Ollama download.
 
-Setup can be opened again from a toolbar button. It repairs a missing model or a broken venv.
+Each launch checks the runtime and repairs a missing model or a broken venv. Setup is not a toolbar button.
 
 ## Azure DevOps connection
 
-`ConnectView` fields:
-
-- Organization, default `rootquotient`
-- Project, default `Ecom MVP`
-- Personal access token, secure field
+`ConnectView` asks for the personal access token once. Organization stays `rootquotient` and project stays `Ecom MVP`. The screen lists the steps to create a token at `https://dev.azure.com/rootquotient/_usersSettings/tokens` and the mandatory scopes: Work Items Read, and Test Management Read.
 
 The project URL is built as `https://dev.azure.com/{org}/{project}` with the project name percent-encoded. The same rules as `ADOClient`: HTTPS, no query, no fragment.
 
-Verify runs `driver.py sprints` with those variables. Success stores the token in Keychain item `ado-pat` (service `com.rootquotient.storyguard`) and stores the org, project, and URL in `UserDefaults`. Failure shows the driver error (missing token, 401, bad URL) on the form.
+Verify runs `driver.py sprints` with those variables. Success stores the token in the private `ado-pat` file and stores the org, project, and URL in `UserDefaults`. Failure shows the driver error on the form.
 
-A later launch reads the Keychain and skips this screen when verify still succeeds. A Change connection button returns to the form. Disconnect deletes the Keychain item.
-
-The screen text tells the user to create the token at `https://dev.azure.com/{org}/_usersSettings/tokens` with Work Items Read. The app only reads work items, iterations, and test plans. It does not write to Azure DevOps.
+A later launch reads that file and skips this screen when verify still succeeds. Connection in the toolbar returns to the form. Disconnect deletes the file.
 
 ## Generate screen
 
@@ -126,7 +121,7 @@ Commands:
 While generate runs, the driver reads the CLI's stderr. Lines already look like `[story-guard] reviewing AC-01 against Suite (3/12, ...)`. The driver turns each line into one JSON object on stdout:
 
 ```json
-{"event":"progress","story_index":1,"story_count":2,"message":"reviewing AC-01 against Suite (3/12, ...)","percent":18}
+{"event":"progress","story_index":1,"story_count":2,"message":"completed AC-03: 2 predicted test links","percent":12,"ac_completed":3,"ac_total":12}
 {"event":"report","story_id":"121213","pdf":"/.../artifacts/121213.pdf","markdown":"/.../artifacts/121213.md"}
 {"event":"error","story_id":"123086","message":"..."}
 {"event":"done","written":["121213"],"failed":["123086"]}
@@ -134,11 +129,11 @@ While generate runs, the driver reads the CLI's stderr. Lines already look like 
 
 Percent for a batch:
 
-- Before the first `reviewing i/n` line, the story sits at 5.
-- A `reviewing … (i/n` line maps that story to `5 + 85 * i / n`.
-- `rendering Markdown and PDF` maps that story to 95.
+- `live review started: N acceptance criteria` sets the total. Until a criterion is completed, the story sits at 0.
+- Each `completed AC-…:` line counts one acceptance criterion, once. The story percent is `completed * 100 / N`. Three of twelve is 25.
+- The first fraction on a `reviewing` line is a suite batch inside the current criterion. It does not move the percent.
 - `reports written` maps that story to 100.
-- Overall percent is `((story_index - 1) * 100 + story_percent) / story_count`.
+- Overall percent is `((story_index - 1) * 100 + story_percent) / story_count`. Three of twelve on story 1 of 2 is 12.
 
 A story that fails still advances the batch. The next story starts. The final `done` event carries both lists. The CLI already does this and exits 1 when any story fails. The driver exits with that same code.
 
@@ -172,7 +167,7 @@ Launch
        -> Report (PDF + Download)
 ```
 
-The toolbar always offers Setup and Connection so a finished install can still repair the model or replace the token.
+The toolbar offers Connection so the token can be replaced. Setup runs when the app opens.
 
 ## Engine changes
 

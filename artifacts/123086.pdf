@@ -58,7 +58,7 @@ endobj
 endobj
 10 0 obj
 <<
-/Length 12503
+/Length 12506
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -648,25 +648,25 @@ Q
 q
 1 0 0 1 36.24 137.3956 cm
 q
-BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Test 124307 verifies successful login with valid credentials and redirection.) Tj T* ET
+BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Test 124307 verifies successful login with correct credentials and redirection to the dashboard.) Tj T* ET
 Q
 Q
 q
 1 0 0 1 36.24 124.8956 cm
 q
-BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Tests 124311 and 124312 verify invalid credentials errors for unregistered emails and wrong passwords respectively.) Tj T* ET
+BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Tests 124311 and 124312 verify that invalid credentials result in an error message and the user stays on the login page.) Tj T* ET
 Q
 Q
 q
 1 0 0 1 36.24 112.3956 cm
 q
-BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Test 124309 verifies the expected result of displaying plain text when Show is clicked.) Tj T* ET
+BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Test 124309 verifies the happy path where clicking Show displays plain text.) Tj T* ET
 Q
 Q
 q
 1 0 0 1 36.24 99.89559 cm
 q
-BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Test 124310 verifies the expected result of redirecting to the password recovery page when clicking Forgot Password.) Tj T* ET
+BT 1 0 0 1 2 2.5 Tm 10.5 TL /F3 5 Tf .141176 .192157 .25098 rg (n) Tj /F1 8 Tf ( Test 124310 verifies the happy path of clicking Forgot Password and being redirected to the recovery page.) Tj T* ET
 Q
 Q
 q
@@ -1622,7 +1622,7 @@ xref
 0000000890 00000 n 
 0000001182 00000 n 
 0000001247 00000 n 
-0000013803 00000 n 
+0000013806 00000 n 
 trailer
 <<
 /ID 
@@ -1634,5 +1634,5 @@ trailer
 /Size 12
 >>
 startxref
-31339
+31342
 %%EOF
