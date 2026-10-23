@@ -22,7 +22,15 @@ from story_guard.score import is_closed_status, is_unable_status
 
 PAGE_SIZE = landscape(A4)
 MARGIN_X = 0.42 * inch
+# These match the SimpleDocTemplate margins in render.py. The frame also
+# keeps ReportLab's default 6pt padding, so a flowable sees less than the
+# margin box. The summary table is one row and cannot split, so its height
+# has to stay inside that inner frame.
+PAGE_TOP = 0.34 * inch
+PAGE_BOTTOM = 0.5 * inch
+FRAME_PAD = 6
 CONTENT_WIDTH = PAGE_SIZE[0] - (2 * MARGIN_X)
+_PORTFOLIO_HEADING = "1. Portfolio Summary"
 
 NAVY = colors.HexColor("#1b365d")
 BANNER = colors.HexColor("#16324f")
@@ -78,8 +86,8 @@ def example_flowables(
         Spacer(1, 4),
         _kpi_row(facts, styles),
         Spacer(1, 8),
-        Paragraph("1. Portfolio Summary", styles["section"]),
-        _summary_block(facts, narrative, styles),
+        Paragraph(_PORTFOLIO_HEADING, styles["section"]),
+        *_summary_flowables(facts, narrative, styles),
         Paragraph(
             "Note: Bugs with status other than Resolved, Closed, Rejected / Unable to Reproduce are considered open bugs.",
             styles["note"],
@@ -406,8 +414,123 @@ def _kpi_row(facts: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
     return table
 
 
+_PANEL_OBSERVATION_LIMIT = 8
+_BUG_DETAIL = re.compile(r"^Bug \d+ (?:description|repro steps)\b")
+
+
+def _observations_after(lines: list[str], kept: list[str]) -> list[str]:
+    """Lines that did not stay in the side panel, in their original order."""
+    pending = list(kept)
+    rest = []
+    for line in lines:
+        if pending and line == pending[0]:
+            pending.pop(0)
+            continue
+        rest.append(line)
+    return rest
+
+
+def _split_observations(lines: list[str]) -> tuple[list[str], list[str]]:
+    """Keep the summary panel to a page. Longer notes flow after it."""
+    panel: list[str] = []
+    notes: list[str] = []
+    for line in lines:
+        if (
+            _BUG_DETAIL.match(line)
+            or len(line) > 240
+            or len(panel) >= _PANEL_OBSERVATION_LIMIT
+        ):
+            notes.append(line)
+        else:
+            panel.append(line)
+    return panel, notes
+
+
+def _inner_frame_height() -> float:
+    """Height a flowable can use on an empty page, after frame padding."""
+    return PAGE_SIZE[1] - PAGE_TOP - PAGE_BOTTOM - (2 * FRAME_PAD)
+
+
+def _summary_height_limit(styles: dict[str, ParagraphStyle]) -> float:
+    """Tallest summary row that still fits on a page with its section heading.
+
+    ReportLab keeps the heading with the next flowable. The summary is one
+    table row, so a row taller than the frame raises LayoutError.
+    """
+    heading = Paragraph(_PORTFOLIO_HEADING, styles["section"])
+    _width, heading_height = heading.wrap(CONTENT_WIDTH, _inner_frame_height())
+    return _inner_frame_height() - heading_height - heading.getSpaceAfter() - 2
+
+
+def _summary_is_within(block: Table, limit: float) -> bool:
+    _width, height = block.wrap(CONTENT_WIDTH, _inner_frame_height() * 4)
+    return height <= limit
+
+
+def _pack_summary_side(
+    facts: dict[str, Any],
+    styles: dict[str, ParagraphStyle],
+    observations: list[str],
+    actions: list[tuple[str, str]],
+) -> tuple[list[str], list[tuple[str, str]]]:
+    """Keep a prefix of the side panel that still fits in one frame."""
+    limit = _summary_height_limit(styles)
+    kept_observations: list[str] = []
+    for index in range(1, len(observations) + 1):
+        trial = observations[:index]
+        if not _summary_is_within(_summary_block(facts, None, styles, trial, []), limit):
+            break
+        kept_observations = trial
+    kept_actions: list[tuple[str, str]] = []
+    for index in range(1, len(actions) + 1):
+        trial = actions[:index]
+        block = _summary_block(facts, None, styles, kept_observations, trial)
+        if not _summary_is_within(block, limit):
+            break
+        kept_actions = trial
+    return kept_observations, kept_actions
+
+
+def _summary_flowables(
+    facts: dict[str, Any],
+    narrative: dict | None,
+    styles: dict[str, ParagraphStyle],
+) -> list[Any]:
+    """The metric panel, then any review text that would not fit beside it."""
+    observations = _observations(narrative, facts)
+    actions = _actions(narrative)
+    short, _long_notes = _split_observations(observations)
+    panel, panel_actions = _pack_summary_side(facts, styles, short, actions)
+    notes = _observations_after(observations, panel)
+    flow: list[Any] = [
+        _summary_block(facts, narrative, styles, panel, panel_actions)
+    ]
+    extra_actions = actions[len(panel_actions):]
+    if extra_actions:
+        flow.append(Paragraph("Recommended actions", styles["small_head"]))
+        for owner, text in extra_actions:
+            flow.append(_bullet(f"{owner}: {text}", styles["bullet"]))
+    if not notes:
+        return flow
+    flow.append(Spacer(1, 6))
+    flow.append(Paragraph("Review notes", styles["section"]))
+    flow.append(
+        Paragraph(
+            "Bug descriptions, repro steps, and the acceptance-criteria review.",
+            styles["intro"],
+        )
+    )
+    for line in notes:
+        flow.append(_bullet(line, styles["bullet"]))
+    return flow
+
+
 def _summary_block(
-    facts: dict[str, Any], narrative: dict | None, styles: dict[str, ParagraphStyle]
+    facts: dict[str, Any],
+    narrative: dict | None,
+    styles: dict[str, ParagraphStyle],
+    observation_lines: list[str] | None = None,
+    action_lines: list[tuple[str, str]] | None = None,
 ) -> Table:
     priorities = facts["open_bugs_by_priority"]
     def priority_value(key: str) -> int | str:
@@ -446,9 +569,14 @@ def _summary_block(
     left.setStyle(TableStyle(left_style))
 
     right_bits: list[Any] = [Paragraph("Key Observations", styles["obs_head"])]
-    for line in _observations(narrative, facts):
+    lines = (
+        observation_lines
+        if observation_lines is not None
+        else _observations(narrative, facts)
+    )
+    for line in lines:
         right_bits.append(_bullet(line, styles["bullet"]))
-    actions = _actions(narrative)
+    actions = action_lines if action_lines is not None else _actions(narrative)
     if actions:
         right_bits.append(Paragraph("Recommended actions", styles["small_head"]))
         for owner, text in actions:

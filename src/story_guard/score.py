@@ -43,6 +43,8 @@ def score_health(story_record: dict) -> dict:
         "scenario_count": len(scenarios),
         "scenarios": rows,
         "test_count": len(tests),
+        "test_cases": _test_cases(tests),
+        "test_suite_truncated": False,
         "mapped_count": mapped_count,
         "bug_count": len(bugs),
         "open_bug_count": sum(1 for bug in bugs if _is_open(bug)),
@@ -59,6 +61,32 @@ def score_health(story_record: dict) -> dict:
         "rule_ids": list(RULE_IDS),
         "note": note,
     }
+
+
+def _test_cases(tests: list[dict]) -> list[dict]:
+    """Keep case identity and action/expected-result pairs for the narrative input."""
+    cases = []
+    for test in tests:
+        steps = []
+        raw_steps = test.get("steps")
+        if isinstance(raw_steps, list):
+            for step in raw_steps:
+                if not isinstance(step, dict):
+                    continue
+                action = step.get("action")
+                expected_result = step.get("expected_result")
+                if isinstance(action, str) and isinstance(expected_result, str):
+                    steps.append(
+                        {"action": action, "expected_result": expected_result}
+                    )
+        cases.append(
+            {
+                "id": str(test.get("id", "")),
+                "title": test.get("title", ""),
+                "steps": steps,
+            }
+        )
+    return cases
 
 
 def _coverage_rag(rows: list[dict]) -> str:
@@ -386,9 +414,19 @@ def _scenarios(scenarios: list, tests: list) -> tuple[list[dict], int]:
     return rows, mapped_count
 
 
-def coverage_row(ac_id: str, test_ids: list[str], tests: list, text: str = "") -> dict:
-    """One coverage row. Depth, gap, and status come from the mapped test types."""
-    row = _row(ac_id, test_ids, tests)
+def coverage_row(
+    ac_id: str,
+    test_ids: list[str],
+    tests: list,
+    text: str = "",
+    types_by_test: dict | None = None,
+) -> dict:
+    """One coverage row. Depth, gap, and status come from the mapped test types.
+
+    types_by_test is the path label for this acceptance criterion only. The same
+    test can be happy for one criterion and negative for another.
+    """
+    row = _row(ac_id, test_ids, tests, types_by_test)
     extra = _untested_clauses(text, test_ids, tests)
     if row["row_status"] == "none" or not extra:
         return row
@@ -399,14 +437,21 @@ def coverage_row(ac_id: str, test_ids: list[str], tests: list, text: str = "") -
 
 
 def _untested_clauses(text: str, test_ids: list[str], tests: list) -> list[str]:
-    """Expected results that none of the mapped test titles state."""
+    """Expected results that none of the mapped test text states."""
     body = _norm(text)
     titles = []
     wanted = set(test_ids)
     for test in tests:
         if not isinstance(test, dict) or str(test.get("id") or "") not in wanted:
             continue
-        titles.append(_norm(str(test.get("title") or "")))
+        titles.append(
+            _norm(
+                " ".join(
+                    str(test.get(key) or "")
+                    for key in ("title", "description", "steps", "parameters")
+                )
+            )
+        )
     blob = " ".join(titles)
     gaps = []
     if (
@@ -419,7 +464,12 @@ def _untested_clauses(text: str, test_ids: list[str], tests: list) -> list[str]:
     return gaps
 
 
-def _row(ac_id: str, test_ids: list[str], tests: list) -> dict:
+def _row(
+    ac_id: str,
+    test_ids: list[str],
+    tests: list,
+    types_by_test: dict | None = None,
+) -> dict:
     if not test_ids:
         return {
             "ac_id": ac_id,
@@ -430,11 +480,13 @@ def _row(ac_id: str, test_ids: list[str], tests: list) -> dict:
             "row_status": "none",
             "buckets_present": 0,
         }
+    overrides = types_by_test or {}
     present = set()
     for test_id in test_ids:
         for test in tests:
             if str(test.get("id", "")) == test_id:
-                bucket = _type_bucket(test.get("type"))
+                kind = overrides.get(test_id) or test.get("type")
+                bucket = _type_bucket(kind)
                 if bucket:
                     present.add(bucket)
     missing = [gap for key, _line, gap in _DEPTH if key not in present]

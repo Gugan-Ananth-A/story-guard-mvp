@@ -287,6 +287,13 @@ def test_render_pdf_missing_template_leaves_no_partial_output(tmp_path: Path) ->
 
 def test_live_mapper_prompt_has_no_story_specific_content() -> None:
     prompt = LIVE_MAPPER_PROMPT.read_text(encoding="utf-8")
+    # The prompt tells the model not to emit this phrase. That instruction is allowed.
+    without_coverage_ban = re.sub(
+        r'do not write the phrase "partially covered"',
+        "",
+        prompt,
+        flags=re.IGNORECASE,
+    )
     prohibited_patterns = {
         "SNAP identifier": re.compile(r"\bSNAP\b", re.IGNORECASE),
         "test or suite ID": re.compile(r"\b\d{5,}\b"),
@@ -303,7 +310,8 @@ def test_live_mapper_prompt_has_no_story_specific_content() -> None:
         "prohibited coverage phrase": re.compile(r"partially covered", re.IGNORECASE),
     }
     for description, pattern in prohibited_patterns.items():
-        assert pattern.search(prompt) is None, f"live mapper prompt contains prohibited {description}"
+        scanned = without_coverage_ban if description == "prohibited coverage phrase" else prompt
+        assert pattern.search(scanned) is None, f"live mapper prompt contains prohibited {description}"
 
 
 def test_live_mapper_prompt_preserves_generic_output_contract() -> None:
@@ -420,7 +428,8 @@ def test_synthetic_story_uses_the_existing_dashboard_layout(tmp_path: Path) -> N
     assert "SYN-BUG-001" in text
     assert "Test suite" not in text
 
-    reference = PdfReader(PROJECT_ROOT / "artifacts" / "123086.pdf")
+    # The generated 123086 snapshot is not kept in the tree. The example PDF is the layout reference.
+    reference = PdfReader(PROJECT_ROOT / "story_health_report_example.pdf")
     reference_text = "\n".join(page.extract_text() or "" for page in reference.pages)
     ordered_sections = (
         "1. Portfolio Summary",
@@ -457,3 +466,81 @@ def test_missing_bug_data_is_not_reported_as_zero_bugs(tmp_path: Path) -> None:
     assert "Unavailable" in text
     assert "No bugs." not in text
     assert "No open bugs" not in text
+
+
+def test_long_review_notes_flow_past_the_summary_table(tmp_path: Path) -> None:
+    """Bug text and later findings must not sit in the one-row summary table."""
+    marker = "BUGDETAILMARKER"
+    narrative = {
+        "headline": "No open bugs.",
+        "observations": [
+            "Story health - No open bugs",
+            "8 acceptance criteria, 0 adequately covered, 0 with gaps, 8 not covered.",
+            "18 tests and 0 mapped.",
+            "0 bugs, with 0 open.",
+            f"Bug 122590 description: {marker} " + ("x" * 1500),
+            "Bug 122590 repro steps part 1 of 2: " + ("y" * 1200),
+            "Bug 122590 repro steps part 2 of 2: " + ("z" * 200),
+            *[f"Finding {index} names AC-1." for index in range(1, 25)],
+        ],
+        "actions": [],
+    }
+    output_path = tmp_path / "long-notes.pdf"
+    render_pdf(hand_built_score(), TEMPLATE, output_path, narrative=narrative)
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(output_path))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    assert "Key Observations" in text
+    assert "Review notes" in text
+    assert marker in text
+    assert "Finding 24" in text
+    assert len(reader.pages) >= 2
+
+
+def test_long_actions_flow_past_the_summary_table(tmp_path: Path) -> None:
+    """A side panel taller than one page used to raise LayoutError."""
+    actions = [
+        {
+            "owner": "QA",
+            "text": (
+                f"ACTIONMARKER-{index:02d} close the gap. "
+                + ("Check the retained email and the inline error. " * 12)
+            ),
+        }
+        for index in range(16)
+    ]
+    actions.append(
+        {
+            "owner": "Dev",
+            "text": "HUGEACTIONMARKER " + ("Reproduce the open defect. " * 400),
+        }
+    )
+    narrative = {
+        "headline": "Coverage gaps remain.",
+        "observations": [
+            "Story health - No open bugs",
+            *[
+                f"OBSMARKER-{index:02d} "
+                + ("This criterion still has a coverage gap. " * 4)
+                for index in range(10)
+            ],
+        ],
+        "actions": actions,
+    }
+    output_path = tmp_path / "long-actions.pdf"
+    render_pdf(hand_built_score(), TEMPLATE, output_path, narrative=narrative)
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(output_path))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    assert "Key Observations" in text
+    assert "Recommended actions" in text
+    for index in range(16):
+        assert f"ACTIONMARKER-{index:02d}" in text
+    for index in range(10):
+        assert f"OBSMARKER-{index:02d}" in text
+    assert "HUGEACTIONMARKER" in text
+    assert len(reader.pages) >= 2

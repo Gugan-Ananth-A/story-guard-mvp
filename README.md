@@ -28,16 +28,34 @@ python scripts/ollama_smoke.py
 
 The smoke script targets `qwen3.5:4b`, sends `num_ctx` 8192 on the request, and prints one JSON object.
 
+To use the ChatGPT API instead of Ollama, set these values in `.env`:
+
+```bash
+STORY_GUARD_LLM=chatgpt
+OPENAI_API_KEY=your_api_key
+OPENAI_MODEL=gpt-5.6-luna
+# Optional. Overrides the provider model. Leave unset when switching providers.
+# STORY_GUARD_MODEL=
+```
+
+`OPENAI_MODEL` selects the model. Leave it unset to use `gpt-5.6-luna`. `OPENAI_BASE_URL` defaults to `https://api.openai.com/v1`. `chatgpt` and `openai` are the same provider. Requests use `/chat/completions`, bearer authentication, and JSON output. GPT-5 and GPT-6 send `reasoning_effort` `low` and omit `temperature`. The completion budget adds room for reasoning tokens. The JSON object is read from the answer.
+
 To use DeepSeek instead of Ollama, set these values in `.env`:
 
 ```bash
 STORY_GUARD_LLM=deepseek
 DEEPSEEK_API_KEY=your_api_key
-DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_MODEL=deepseek-flash
+# Optional. Overrides OLLAMA_MODEL, DEEPSEEK_MODEL, and XAI_MODEL.
+# STORY_GUARD_MODEL=deepseek-v4-pro
 ```
 
+`DEEPSEEK_MODEL` selects the DeepSeek model. Leave it unset to use `deepseek-flash`. Set `STORY_GUARD_MODEL` when you want one model id to apply to whichever provider `STORY_GUARD_LLM` selects. `DEEPSEEK_BASE_URL` defaults to `https://api.deepseek.com`.
+
+The project `.env` replaces a shell value for `STORY_GUARD_LLM`, `STORY_GUARD_MODEL`, `OPENAI_MODEL`, `DEEPSEEK_MODEL`, `OLLAMA_MODEL`, and `XAI_MODEL`. An older export does not keep the next run on the previous provider after the file is changed. A model id removed from `.env` is not kept from the shell.
+
 The DeepSeek path uses its `/chat/completions` endpoint, bearer authentication,
-and JSON output mode. Leave `STORY_GUARD_LLM=ollama` to keep using Qwen locally.
+and JSON output mode. Leave `STORY_GUARD_LLM=ollama` to keep using Qwen locally. Ollama still reads `OLLAMA_MODEL`, and `STORY_GUARD_MODEL` overrides that too.
 
 `story-guard generate` keeps stdout limited to the final Markdown path. Progress,
 including fetch, contract validation, each AC/suite review, retries, and report
