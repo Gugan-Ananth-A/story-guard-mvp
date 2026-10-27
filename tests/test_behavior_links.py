@@ -137,7 +137,9 @@ def test_coverage_percent_uses_depth_buckets_and_the_table_uses_status():
     assert status == "partial"
     assert gap != "No coverage"
     assert "Positive" in depth
-    assert facts["coverage_label"] == "33%"
+    assert facts["coverage_label"] == "35%"
+    assert score["scenarios"][0]["weighted_score"] == 70
+    assert score["scenarios"][1]["weighted_score"] == 0
     assert facts["adequate_count"] == 0
     assert facts["partial_count"] == 1
     assert facts["none_count"] == 1

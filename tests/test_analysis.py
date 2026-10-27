@@ -627,6 +627,69 @@ def test_unknown_ids_and_other_types_are_dropped_and_health_stays_on_the_bugs():
     assert "99%" not in facts["coverage_label"]
 
 
+def test_expected_counts_set_the_weighted_score_and_name_the_misses():
+    from story_guard.report_layout import _facts
+
+    record = _record()
+    record["acceptance_criteria"] = [record["acceptance_criteria"][0]]
+    record["tests"] = [
+        {"id": f"P{index}", "title": f"Positive case {index}", "type": "happy", "mapped_ac_ids": []}
+        for index in range(5)
+    ] + [
+        {"id": f"N{index}", "title": f"Negative case {index}", "type": "negative", "mapped_ac_ids": []}
+        for index in range(6)
+    ] + [
+        {"id": f"A{index}", "title": f"Adhoc case {index}", "type": "adhoc", "mapped_ac_ids": []}
+        for index in range(2)
+    ]
+    judgment = {
+        "headline": "No open bugs.",
+        "health": "Green",
+        "analysis": "The listed cases check AC-01.",
+        "test_coverage_percent": 99,
+        "reviews": [
+            {
+                "ac_id": "AC-01",
+                "mapped_test_ids": [test["id"] for test in record["tests"]],
+                "test_types": {
+                    test["id"]: "happy" if test["type"] == "happy" else test["type"]
+                    for test in record["tests"]
+                },
+                "scenario_counts": {
+                    "positive": {
+                        "total": 10,
+                        "missing": [f"missing positive {index}" for index in range(5)],
+                    },
+                    "negative": {
+                        "total": 10,
+                        "missing": [f"missing negative {index}" for index in range(4)],
+                    },
+                    "adhoc": {
+                        "total": 5,
+                        "missing": [f"missing adhoc {index}" for index in range(3)],
+                    },
+                },
+                "coverage_status": "adequate",
+                "finding": "AC-01 is checked by the listed cases.",
+            }
+        ],
+    }
+    result = result_from_judgment(record, judgment)
+    row = result["score"]["scenarios"][0]
+    facts = _facts(result["score"], record)
+
+    assert row["weighted_score"] == 52
+    assert row["scenario_counts"]["positive"]["covered"] == 5
+    assert row["scenario_counts"]["negative"]["covered"] == 6
+    assert row["scenario_counts"]["adhoc"]["covered"] == 2
+    assert "missing positive 4" in "\n".join(row["missed_tests"])
+    assert "missing negative 0" in "\n".join(row["missed_tests"])
+    assert "missing adhoc 2" in "\n".join(row["missed_tests"])
+    assert facts["coverage_label"] == "52%"
+    assert "99%" not in facts["coverage_label"]
+    assert "test_coverage_percent" not in result["score"]
+
+
 def test_a_finding_with_a_percent_sign_is_replaced(monkeypatch):
     def fake_chat(messages, num_predict=8192):
         payload = json.loads(messages[1]["content"].split("\n", 1)[1])

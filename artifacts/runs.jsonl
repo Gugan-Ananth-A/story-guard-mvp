@@ -82,3 +82,7 @@
 {"story_id":"121213","token_count":259011,"narrative_latency_ms":2629565,"prefix_sha256":"ecfef680eb580d900f3c9669476b85a244464dba410581756ea0c22dbe3b1fcd"}
 {"story_id":"123086","token_count":16345,"narrative_latency_ms":376182,"prefix_sha256":"ecfef680eb580d900f3c9669476b85a244464dba410581756ea0c22dbe3b1fcd"}
 {"requested":["121213","123086","124193"],"written":["121213","123086"],"skipped":["124193"]}
+{"story_id":"123086","token_count":17160,"narrative_latency_ms":218697,"prefix_sha256":"ecfef680eb580d900f3c9669476b85a244464dba410581756ea0c22dbe3b1fcd"}
+{"requested":["123086"],"written":["123086"],"skipped":[]}
+{"story_id":"123086","token_count":17165,"narrative_latency_ms":234610,"prefix_sha256":"ecfef680eb580d900f3c9669476b85a244464dba410581756ea0c22dbe3b1fcd"}
+{"requested":["123086"],"written":["123086"],"skipped":[]}

@@ -22,6 +22,15 @@ _DEPTH = (
     ("adhoc", "Adhoc scenarios are covered", "No Adhoc scenarios Covered"),
 )
 
+# Scenario coverage weights. A score from 85 to 95 is the healthy band.
+POSITIVE_WEIGHT = 60
+NEGATIVE_WEIGHT = 30
+ADHOC_WEIGHT = 10
+HEALTHY_COVERAGE_LOW = 85
+HEALTHY_COVERAGE_HIGH = 95
+_MAX_EXPECTED = 40
+_MAX_MISSING = 8
+
 
 def score_health(story_record: dict) -> dict:
     """Apply SR-1, SR-2, and SR-3. Counts come from the record."""
@@ -443,20 +452,194 @@ def coverage_row(
     tests: list,
     text: str = "",
     types_by_test: dict | None = None,
+    scenario_counts: dict | None = None,
 ) -> dict:
     """One coverage row. Depth, gap, and status come from the mapped test types.
 
     types_by_test is the path label for this acceptance criterion only. The same
     test can be happy for one criterion and negative for another.
+    scenario_counts is the model's expected total and missing case names for
+    positive, negative, and adhoc. Covered counts come from the mapped tests.
     """
     row = _row(ac_id, test_ids, tests, types_by_test)
     extra = _untested_clauses(text, test_ids, tests)
-    if row["row_status"] == "none" or not extra:
-        return row
-    gap = str(row["gap"])
-    row["gap"] = "\n".join(extra) if gap == "Adequate" else gap + "\n" + "\n".join(extra)
-    row["row_status"] = "partial"
+    if row["row_status"] != "none" and extra:
+        gap = str(row["gap"])
+        row["gap"] = "\n".join(extra) if gap == "Adequate" else gap + "\n" + "\n".join(extra)
+        row["row_status"] = "partial"
+    _attach_weighted_coverage(row, test_ids, tests, types_by_test, scenario_counts)
     return row
+
+
+def bucket_percent(covered: int, total: int) -> int:
+    """Covered divided by the actual total, as a percent rounded half up."""
+    if total <= 0:
+        return 0
+    covered = min(max(covered, 0), total)
+    return (covered * 100 + total // 2) // total
+
+
+def weighted_score(positive_percent: int, negative_percent: int, adhoc_percent: int) -> int:
+    """S = positive%*0.60 + negative%*0.30 + adhoc%*0.10, rounded half up."""
+    return (
+        positive_percent * POSITIVE_WEIGHT
+        + negative_percent * NEGATIVE_WEIGHT
+        + adhoc_percent * ADHOC_WEIGHT
+        + 50
+    ) // 100
+
+
+def row_weighted_score(row: dict) -> int:
+    """The stored weighted score, or the weight of each present bucket."""
+    raw = row.get("weighted_score")
+    if isinstance(raw, int) and not isinstance(raw, bool):
+        return raw
+    if str(row.get("row_status") or "") == "none":
+        return 0
+    depth = str(row.get("depth") or "")
+    return weighted_score(
+        100 if "Positive scenarios are covered" in depth else 0,
+        100 if "Negative scenarios are covered" in depth else 0,
+        100 if "Adhoc scenarios are covered" in depth else 0,
+    )
+
+
+def story_weighted_percent(scenarios: list, scenario_count: int) -> str:
+    """Average of the per-criterion weighted scores, rounded half up."""
+    total = scenario_count if isinstance(scenario_count, int) and scenario_count > 0 else 0
+    if total <= 0:
+        return "n/a"
+    score_sum = 0
+    for row in scenarios:
+        if isinstance(row, dict):
+            score_sum += row_weighted_score(row)
+    return f"{(score_sum + total // 2) // total}%"
+
+
+def _whole(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return None
+
+
+def _bucket_counts(test_ids: list[str], tests: list, types_by_test: dict | None) -> dict[str, int]:
+    counts = {"positive": 0, "negative": 0, "adhoc": 0}
+    overrides = types_by_test or {}
+    by_id: dict[str, dict] = {}
+    for test in tests:
+        if isinstance(test, dict):
+            by_id.setdefault(str(test.get("id", "")), test)
+    seen: set[str] = set()
+    for test_id in test_ids:
+        if test_id in seen:
+            continue
+        seen.add(test_id)
+        test = by_id.get(test_id)
+        if test is None:
+            continue
+        bucket = _type_bucket(overrides.get(test_id) or test.get("type"))
+        if bucket:
+            counts[bucket] += 1
+    return counts
+
+
+def _covered_titles(test_ids: list[str], tests: list) -> set[str]:
+    wanted = set(test_ids)
+    titles: set[str] = set()
+    for test in tests:
+        if not isinstance(test, dict) or str(test.get("id", "")) not in wanted:
+            continue
+        title = " ".join(str(test.get("title") or "").split()).casefold()
+        if title:
+            titles.add(title)
+    return titles
+
+
+def _clean_missing(names: object, titles: set[str]) -> list[str]:
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    if not isinstance(names, list):
+        return cleaned
+    for name in names:
+        if not isinstance(name, str):
+            continue
+        text = " ".join(name.split())
+        if not text or "%" in text or "partially covered" in text.casefold():
+            continue
+        text = text[:140].rstrip()
+        key = text.casefold()
+        if key in seen or key in titles:
+            continue
+        seen.add(key)
+        cleaned.append(text)
+        if len(cleaned) >= _MAX_MISSING:
+            break
+    return cleaned
+
+
+def _expected_total(plan: dict | None, key: str) -> int:
+    if not isinstance(plan, dict):
+        return 0
+    item = plan.get(key)
+    number = _whole(item.get("total")) if isinstance(item, dict) else _whole(item)
+    if number is None or number <= 0:
+        return 0
+    return min(number, _MAX_EXPECTED)
+
+
+def _missing_source(plan: dict | None, key: str) -> list:
+    if not isinstance(plan, dict):
+        return []
+    item = plan.get(key)
+    if isinstance(item, dict) and isinstance(item.get("missing"), list):
+        return item["missing"]
+    return []
+
+
+def _attach_weighted_coverage(
+    row: dict,
+    test_ids: list[str],
+    tests: list,
+    types_by_test: dict | None,
+    plan: dict | None,
+) -> None:
+    """Store covered/total percents, the weighted score, and the missed cases."""
+    covered_counts = _bucket_counts(test_ids, tests, types_by_test)
+    titles = _covered_titles(test_ids, tests)
+    math: dict[str, dict] = {}
+    percents: dict[str, int] = {}
+    missed: list[str] = []
+    for key, _depth_line, gap_line in _DEPTH:
+        covered = covered_counts[key]
+        names = _clean_missing(_missing_source(plan, key), titles)
+        expected = _expected_total(plan, key)
+        if not names and covered == 0 and expected == 0:
+            names = [gap_line]
+        total = max(expected, covered + len(names))
+        percent = bucket_percent(covered, total)
+        unnamed = max(0, total - covered - len(names))
+        math[key] = {"covered": covered, "total": total, "percent": percent}
+        percents[key] = percent
+        if names or unnamed:
+            missed.append({"positive": "Positive", "negative": "Negative", "adhoc": "Ad-hoc"}[key])
+            missed.extend(f"- {name}" for name in names)
+            if unnamed:
+                note = f"{unnamed} more not described" if names else f"{unnamed} not described"
+                missed.append(f"- {note}")
+    row["scenario_counts"] = math
+    row["weighted_score"] = weighted_score(
+        percents["positive"], percents["negative"], percents["adhoc"]
+    )
+    row["missed_tests"] = missed
+    # A filled bucket is not full coverage when expected cases are still missing.
+    if row.get("row_status") == "adequate" and missed:
+        row["row_status"] = "partial"
+        if str(row.get("gap") or "") == "Adequate":
+            row["gap"] = "Missing scenarios remain"
 
 
 def _untested_clauses(text: str, test_ids: list[str], tests: list) -> list[str]:

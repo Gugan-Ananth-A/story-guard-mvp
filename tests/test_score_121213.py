@@ -280,6 +280,49 @@ def test_three_mapped_types_make_one_row_adequate():
     assert score["health"] == "No open bugs"
 
 
+def test_weighted_score_uses_covered_over_expected_counts():
+    """5/10, 6/10, and 2/5 weight to 52%."""
+    from story_guard.score import coverage_row, story_weighted_percent, weighted_score
+
+    tests = []
+    ids = []
+    for index, kind in (
+        *[(index, "happy") for index in range(5)],
+        *[(index, "negative") for index in range(6)],
+        *[(index, "adhoc") for index in range(2)],
+    ):
+        test_id = f"{kind[:1].upper()}{index}"
+        ids.append(test_id)
+        tests.append({"id": test_id, "title": f"{kind} case {index}", "type": kind})
+    row = coverage_row(
+        "AC-01",
+        ids,
+        tests,
+        scenario_counts={
+            "positive": {
+                "total": 10,
+                "missing": [f"missing positive {index}" for index in range(5)],
+            },
+            "negative": {
+                "total": 10,
+                "missing": [f"missing negative {index}" for index in range(4)],
+            },
+            "adhoc": {
+                "total": 5,
+                "missing": [f"missing adhoc {index}" for index in range(3)],
+            },
+        },
+    )
+
+    assert row["scenario_counts"]["positive"] == {"covered": 5, "total": 10, "percent": 50}
+    assert row["scenario_counts"]["negative"]["percent"] == 60
+    assert row["scenario_counts"]["adhoc"]["percent"] == 40
+    assert row["weighted_score"] == 52
+    assert weighted_score(50, 60, 40) == 52
+    assert "missing positive 0" in " ".join(row["missed_tests"])
+    assert story_weighted_percent([row, {"row_status": "none"}], 2) == "26%"
+
+
 def test_score_stand_in_text_is_labeled():
     text = (ROOT / "docs" / "rag-stand-in.md").read_text(encoding="utf-8")
     paragraphs = [part.strip() for part in text.split("\n\n") if part.strip()]

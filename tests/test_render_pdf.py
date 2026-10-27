@@ -223,7 +223,9 @@ def test_report_omits_the_test_suite_and_covers_ac_11(tmp_path: Path) -> None:
     assert "Test suite" not in text
     assert "Suite 121215" not in text
     assert "Story health - No open bugs" in text
-    assert "33%" in text
+    assert "50%" in text
+    assert "Coverage weightage" in text
+    assert "Missed test cases" in text
     assert "Rejected / Unable to Reproduce" in text
     assert "AC-11" in text
     assert "No Positive scenarios Covered" in text
@@ -325,6 +327,7 @@ def test_live_mapper_prompt_preserves_generic_output_contract() -> None:
         '"finding"',
         '"depth"',
         '"gap"',
+        '"scenario_counts"',
     ):
         assert field in prompt
     assert "as happy, negative, or adhoc" in prompt
@@ -406,6 +409,8 @@ def test_synthetic_story_uses_the_existing_dashboard_layout(tmp_path: Path) -> N
         "Total TC",
         "Total Bugs",
         "Coverage Depth (AI)",
+        "Missed test cases",
+        "Coverage weightage",
         "Bug ID",
         "Story Guard",
         "Page 1 of",

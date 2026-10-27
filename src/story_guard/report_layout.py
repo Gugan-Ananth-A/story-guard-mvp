@@ -18,7 +18,17 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import CondPageBreak, KeepTogether, Paragraph, Spacer, Table, TableStyle
 
-from story_guard.score import is_closed_status, is_unable_status
+from story_guard.score import (
+    ADHOC_WEIGHT,
+    HEALTHY_COVERAGE_HIGH,
+    HEALTHY_COVERAGE_LOW,
+    NEGATIVE_WEIGHT,
+    POSITIVE_WEIGHT,
+    is_closed_status,
+    is_unable_status,
+    row_weighted_score,
+    story_weighted_percent,
+)
 
 PAGE_SIZE = landscape(A4)
 MARGIN_X = 0.42 * inch
@@ -100,7 +110,11 @@ def example_flowables(
         KeepTogether([
             Paragraph("3. Acceptance Criteria vs Test Case Coverage", styles["section"]),
             Paragraph(
-                "Coverage depth shows which scenario types (Positive, Negative, Adhoc) are covered by test cases for each acceptance criterion; coverage gap shows what is missing. The cells are the score's depth and gap.",
+                "Coverage depth shows which scenario types are present. "
+                f"Score weights positive coverage at {POSITIVE_WEIGHT}%, negative at {NEGATIVE_WEIGHT}%, "
+                f"and adhoc at {ADHOC_WEIGHT}%. "
+                "Missed test cases are the cases still not written for that criterion. "
+                f"A score from {HEALTHY_COVERAGE_LOW}% to {HEALTHY_COVERAGE_HIGH}% is healthy.",
                 styles["intro"],
             ),
             Spacer(1, 3),
@@ -381,7 +395,7 @@ def _kpi_row(facts: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
         (str(1), "User Stories Assessed", BLUE),
         (str(facts["at_risk"]), "Stories At Risk", RED),
         (str(facts["healthy"]), "Stories Healthy", GREEN),
-        (facts["coverage_label"], "Avg Test Case Coverage", BLUE),
+        (facts["coverage_label"], "Avg Test Case Coverage", _coverage_color(facts["coverage_label"])),
         (_display_count(facts["open_bug_count"]), "Total Open Bugs", ORANGE),
         (_display_count(facts["reopened"]), "Reopened Bugs", RED),
         (_display_count(facts["unable"]), "Rejected / Unable to Reproduce", RED),
@@ -583,6 +597,8 @@ def _summary_block(
             right_bits.append(_bullet(f"{owner}: {text}", styles["bullet"]))
     right_bits.append(Paragraph("Health status", styles["small_head"]))
     right_bits.append(_legend(styles))
+    right_bits.append(Paragraph("Coverage weightage", styles["small_head"]))
+    right_bits.append(_weightage(styles))
     right = right_bits
     block = Table(
         [[left, right]],
@@ -632,6 +648,65 @@ def _legend(styles: dict[str, ParagraphStyle]) -> Table:
         commands.append(("BACKGROUND", (0, index), (0, index), fill))
     table.setStyle(TableStyle(commands))
     return table
+
+
+def _weightage(styles: dict[str, ParagraphStyle]) -> Table:
+    """Weights used by the average test-case score, in the same shape as health status."""
+    items = [
+        ("Positive", f"{POSITIVE_WEIGHT}%", BLUE, colors.white, "Weight of positive scenario coverage"),
+        ("Negative", f"{NEGATIVE_WEIGHT}%", ORANGE, colors.white, "Weight of negative scenario coverage"),
+        ("Adhoc", f"{ADHOC_WEIGHT}%", colors.HexColor("#5c6b7a"), colors.white, "Weight of adhoc scenario coverage"),
+        (
+            "Healthy",
+            f"{HEALTHY_COVERAGE_LOW}% to {HEALTHY_COVERAGE_HIGH}%",
+            GREEN,
+            colors.white,
+            "Weighted score in this range",
+        ),
+    ]
+    label = ParagraphStyle(
+        "WeightLabel", parent=styles["td_center"], fontName="Helvetica-Bold", fontSize=7,
+    )
+    rule = ParagraphStyle("WeightRule", parent=styles["td"], fontSize=7.5)
+    rows = []
+    fills = []
+    for name, value, fill, ink, description in items:
+        named = ParagraphStyle(f"Weight{name}", parent=label, textColor=ink)
+        rows.append([
+            Paragraph(f"{name} {value}", named),
+            Paragraph(description, rule),
+        ])
+        fills.append(fill)
+    table = Table(rows, colWidths=[118, 200])
+    commands: list[tuple] = [
+        ("GRID", (0, 0), (-1, -1), 0.3, LINE),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("BACKGROUND", (0, 0), (1, -1), PANEL),
+    ]
+    for index, fill in enumerate(fills):
+        commands.append(("BACKGROUND", (0, index), (0, index), fill))
+    table.setStyle(TableStyle(commands))
+    return table
+
+
+def _coverage_color(label: str) -> colors.Color:
+    """Green inside the healthy band, amber below it, blue above it."""
+    if not isinstance(label, str) or not label.endswith("%"):
+        return BLUE
+    try:
+        value = int(label[:-1])
+    except ValueError:
+        return BLUE
+    if HEALTHY_COVERAGE_LOW <= value <= HEALTHY_COVERAGE_HIGH:
+        return GREEN
+    if value < HEALTHY_COVERAGE_LOW:
+        return AMBER
+    return BLUE
 
 
 def _overview_table(facts: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
@@ -703,39 +778,96 @@ def _coverage_table(facts: dict[str, Any], styles: dict[str, ParagraphStyle]) ->
         _p("AC ID", styles["th"]),
         _p("Coverage Depth (AI)", styles["th"]),
         _p("Coverage Gap (AI)", styles["th"]),
+        _p("Score", styles["th"]),
+        _p("Missed test cases", styles["th"]),
     ]]
-    paints: list[tuple[int, colors.Color]] = []
+    paints: list[tuple[int, colors.Color, int | None]] = []
     if not facts["scenarios"]:
         empty_text = (
             "No acceptance criteria provided."
             if facts["criteria_available"] and facts["scenario_count"] == 0
             else "Acceptance criteria unavailable."
         )
-        rows.append([_p(empty_text, styles["td"]), "", ""])
+        rows.append([_p(empty_text, styles["td"]), "", "", "", ""])
     for scenario in facts["scenarios"]:
         depth, gap, status = _depth_and_gap(scenario)
+        score = row_weighted_score(scenario) if isinstance(scenario, dict) else None
         rows.append([
             _p(scenario.get("ac_id", ""), styles["td_center"]),
             _p(depth, styles["td"]),
             _p(gap, styles["td"]),
+            _p(_score_text(scenario), styles["td"]),
+            _p(_missed_text(scenario), styles["td"]),
         ])
-        paints.append((len(rows) - 1, _gap_color(status)))
-    table = Table(rows, colWidths=[58, 340, CONTENT_WIDTH - 398], repeatRows=1)
+        paints.append((len(rows) - 1, _gap_color(status), score))
+    ac_width = 64
+    score_width = 96
+    depth_width = 136
+    gap_width = 128
+    missed_width = CONTENT_WIDTH - (ac_width + depth_width + gap_width + score_width)
+    table = Table(
+        rows,
+        colWidths=[ac_width, depth_width, gap_width, score_width, missed_width],
+        repeatRows=1,
+    )
     commands: list[tuple] = [
         ("BACKGROUND", (0, 0), (-1, 0), NAVY),
         ("GRID", (0, 0), (-1, -1), 0.3, LINE),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
     ]
     if not facts["scenarios"]:
         commands.append(("SPAN", (0, 1), (-1, 1)))
-    for index, color in paints:
+    for index, color, score in paints:
         commands.append(("BACKGROUND", (1, index), (2, index), color))
+        if isinstance(score, int) and HEALTHY_COVERAGE_LOW <= score <= HEALTHY_COVERAGE_HIGH:
+            commands.append(("BACKGROUND", (3, index), (3, index), GREEN_BG))
     table.setStyle(TableStyle(commands))
     return table
+
+
+def _score_text(row: dict) -> str:
+    """Weighted score, then each scenario count on its own line."""
+    score = row_weighted_score(row)
+    counts = row.get("scenario_counts") if isinstance(row.get("scenario_counts"), dict) else {}
+    lines = [f"{score}%"]
+    for key, label in (("positive", "Positive"), ("negative", "Negative"), ("adhoc", "Ad-hoc")):
+        item = counts.get(key) if isinstance(counts, dict) else None
+        if not isinstance(item, dict):
+            continue
+        lines.append(f"{label} {item.get('covered', 0)}/{item.get('total', 0)}")
+    return "\n".join(lines)
+
+
+def _missed_text(row: dict) -> str:
+    """One line per missed case, with a blank line between scenario types."""
+    missed = row.get("missed_tests")
+    if isinstance(missed, list):
+        lines = [str(item).strip() for item in missed if str(item).strip()]
+        if not lines:
+            return "None"
+        blocks: list[list[str]] = []
+        current: list[str] = []
+        for line in lines:
+            if line.startswith("- "):
+                current.append(line)
+                continue
+            if current:
+                blocks.append(current)
+            current = [line]
+        if current:
+            blocks.append(current)
+        return "\n\n".join("\n".join(block) for block in blocks)
+    status = str(row.get("row_status") or "")
+    gap = str(row.get("gap") or "").strip()
+    if status == "none":
+        return "No coverage"
+    if not gap or gap == "Adequate":
+        return "None"
+    return gap
 
 
 def _bug_table(facts: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
@@ -903,25 +1035,15 @@ def _actions(narrative: dict | None) -> list[tuple[str, str]]:
 
 
 def _depth_and_gap(row: dict) -> tuple[str, str, str]:
-    """Paint coverage and include the model's AC-quality assessment."""
+    """Paint coverage depth and the remaining gap. The score column carries the counts."""
     status = str(row.get("row_status") or "")
     gap = str(row.get("gap") or "")
     depth = str(row.get("depth") or "")
-    quality = row.get("ac_quality")
-    if isinstance(quality, dict):
-        quality_status = str(quality.get("status") or "unavailable")
-        issues = quality.get("issues") or []
-        issue_text = "; ".join(str(issue) for issue in issues if str(issue).strip())
-        quality_line = f"AC quality: {quality_status}"
-        if issue_text:
-            quality_line += f" ({issue_text})"
-    else:
-        quality_line = "AC quality: unavailable"
     if status == "none":
-        return "None", f"No coverage\n{quality_line}", "none"
+        return "None", "No coverage", "none"
     if status == "adequate":
-        return _numbered(depth), f"Adequate\n{quality_line}", "adequate"
-    return _numbered(depth), _numbered(gap) + f"\n{quality_line}", "partial"
+        return _numbered(depth), "Adequate", "adequate"
+    return _numbered(depth), _numbered(gap), "partial"
 
 
 def _numbered(text: str) -> str:
@@ -1060,13 +1182,13 @@ _BUCKET_LINES = (
 
 
 def _coverage_label(scenarios: list, scenario_count: int) -> str:
-    """Average of Positive, Negative, and Adhoc coverage. Each bucket is one third of a criterion."""
+    """Average of the per-criterion weighted scores."""
     percentage, _classification = coverage_summary(scenarios, scenario_count)
     return percentage
 
 
 def coverage_summary(scenarios: list, scenario_count: int) -> tuple[str, str]:
-    """Return the rounded bucket coverage percent and its score-derived classification."""
+    """Return the weighted coverage percent and the bucket classification."""
     total = scenario_count if isinstance(scenario_count, int) and scenario_count > 0 else 0
     if total <= 0:
         return "n/a", "none"
@@ -1081,7 +1203,7 @@ def coverage_summary(scenarios: list, scenario_count: int) -> tuple[str, str]:
         depth = str(row.get("depth") or "")
         points += sum(1 for line in _BUCKET_LINES if line in depth)
     denom = total * 3
-    percentage = f"{(points * 100 + denom // 2) // denom}%"
+    percentage = story_weighted_percent(scenarios, total)
     if points == 0:
         classification = "none"
     elif points >= denom:

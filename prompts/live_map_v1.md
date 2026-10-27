@@ -6,6 +6,11 @@ Return one JSON object and nothing else. Do not use a Markdown fence or call too
   "ac_id": "the id copied from the supplied acceptance criterion",
   "mapped_test_ids": [],
   "test_types": {},
+  "scenario_counts": {
+    "positive": {"total": 0, "missing": []},
+    "negative": {"total": 0, "missing": []},
+    "adhoc": {"total": 0, "missing": []}
+  },
   "coverage_status": "none",
   "quality": {
     "status": "needs_improvement",
@@ -30,6 +35,10 @@ How to judge coverage. This call is one acceptance criterion and one suite batch
 - When this criterion's expected result is itself a failure, label one case that proves that result as happy, and label another failure-path case negative when one is listed.
 - For every mapped test whose type is empty and whose title has no P, N, or A token, classify it in test_types from the title, description, steps, and parameters in this part. Do not change a source type that is already happy, negative, or adhoc.
 - A type is kept only when it is happy, negative, or adhoc. Classify an empty type as happy, negative, or adhoc. Use happy for a positive case. Use negative for a security case. Use adhoc for an edge case.
+- Count how many test cases this criterion can be tested with. Put that in scenario_counts. positive.total, negative.total, and adhoc.total are whole numbers. Each total includes the supplied cases of that kind and the cases that are not written yet.
+- missing is a list of short names for cases of that kind that are not in this batch. Name the behavior, not an id. Keep each name to at most twelve words. Use an empty list when nothing of that kind is missing from this batch.
+- A positive case proves the expected result. A negative case is another failure of the same behavior. An adhoc case is an edge of the same behavior, such as whitespace, refresh, or length.
+- When this batch is only part of the criterion or the suite, estimate from this part. The caller keeps the larger total and combines the missing names.
 - Existing source links are intentionally not supplied. Decide the mapping from the criterion and the test evidence in this message.
 - When no test checks this criterion, mapped_test_ids is empty. The finding says that no listed test checks it.
 - coverage_status is your assessment of this batch only. It must be adequate, partial, or none. Use adequate only when the named tests check the behavior and expected result; use partial when they check only part; use none when no test matches.

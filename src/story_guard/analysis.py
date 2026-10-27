@@ -193,6 +193,7 @@ def _judge_suites(
     latency = 0
     truncated = False
     statuses: list[str] = []
+    plans: dict | None = None
     bounded_suites = []
     for suite_id, suite_name, tests in suites:
         kept, cut = _bound_suite_tests(tests)
@@ -240,6 +241,7 @@ def _judge_suites(
             findings.append(str(pair["finding"]))
         for test_id, test_type in (pair.get("test_types") or {}).items():
             votes.setdefault(test_id, []).append(test_type)
+        plans = _merge_scenario_plans(plans, pair.get("scenario_counts"))
         pair_quality = pair.get("quality")
         if isinstance(pair_quality, dict):
             quality = (
@@ -263,6 +265,7 @@ def _judge_suites(
             "test_types": test_types,
             "coverage_status": _combined_status(ids, statuses),
             "quality": quality or _default_quality(criterion),
+            "scenario_counts": plans,
         },
         findings,
         tokens,
@@ -332,14 +335,14 @@ def _judge_pair(
                 budget = max(_PAIR_PREDICT_MIN, budget // 2)
                 correction = (
                     "The previous answer was too long and was rejected. "
-                    "Return one JSON object with ac_id, mapped_test_ids, test_types, coverage_status, quality, and finding."
+                    "Return one JSON object with ac_id, mapped_test_ids, test_types, scenario_counts, coverage_status, quality, and finding."
                 )
             else:
                 correction = (
                     "The previous JSON was rejected: "
                     + text
                     + " Judge this acceptance criterion against this suite batch again. "
-                    "Return one JSON object with ac_id, mapped_test_ids, test_types, coverage_status, quality, and finding."
+                    "Return one JSON object with ac_id, mapped_test_ids, test_types, scenario_counts, coverage_status, quality, and finding."
                 )
             continue
         latency_ms += _elapsed_ms(started)
@@ -909,10 +912,74 @@ def _require_pair(body: dict, criterion: dict, tests: list[dict]) -> dict:
         "ac_id": ac_id,
         "mapped_test_ids": ids,
         "test_types": test_types,
+        "scenario_counts": _scenario_counts(body.get("scenario_counts")),
         "coverage_status": coverage_status,
         "quality": quality,
         "finding": finding,
     }
+
+
+def _scenario_counts(value: object) -> dict | None:
+    """Keep expected totals and missing case names. A missing object is omitted."""
+    if not isinstance(value, dict):
+        return None
+    found: dict[str, dict] = {}
+    for key in ("positive", "negative", "adhoc"):
+        item = value.get(key)
+        total = 0
+        raw_missing: list = []
+        if isinstance(item, dict):
+            number = item.get("total")
+            if isinstance(number, bool):
+                number = None
+            if isinstance(number, float) and number.is_integer():
+                number = int(number)
+            if isinstance(number, int) and number > 0:
+                total = min(number, 40)
+            if isinstance(item.get("missing"), list):
+                raw_missing = item["missing"]
+        elif isinstance(item, int) and not isinstance(item, bool) and item > 0:
+            total = min(item, 40)
+        missing: list[str] = []
+        for entry in raw_missing:
+            if not isinstance(entry, str):
+                continue
+            name = " ".join(entry.split())
+            if not name or "%" in name or "partially covered" in name.casefold():
+                continue
+            name = name[:140].rstrip()
+            if name.casefold() not in {saved.casefold() for saved in missing}:
+                missing.append(name)
+            if len(missing) >= 8:
+                break
+        found[key] = {"total": total, "missing": missing}
+    return found
+
+
+def _merge_scenario_plans(left: dict | None, right: dict | None) -> dict | None:
+    """Keep the larger expected total and the combined missing names."""
+    if not isinstance(left, dict):
+        return right if isinstance(right, dict) else None
+    if not isinstance(right, dict):
+        return left
+    merged: dict[str, dict] = {}
+    for key in ("positive", "negative", "adhoc"):
+        first = left.get(key) if isinstance(left.get(key), dict) else {}
+        second = right.get(key) if isinstance(right.get(key), dict) else {}
+        names: list[str] = []
+        for source in (first.get("missing"), second.get("missing")):
+            if not isinstance(source, list):
+                continue
+            for name in source:
+                if isinstance(name, str) and name.casefold() not in {item.casefold() for item in names}:
+                    names.append(name)
+                if len(names) >= 8:
+                    break
+        merged[key] = {
+            "total": max(int(first.get("total") or 0), int(second.get("total") or 0)),
+            "missing": names,
+        }
+    return merged
 
 
 def _fallback_status(ids: list[str], tests: list[dict]) -> str:
@@ -1166,6 +1233,7 @@ def _score_from_judgment(record: dict, judgment: dict) -> dict:
             scored_tests,
             str(criterion.get("text") or ""),
             types_by_test=review.get("test_types") if isinstance(review, dict) else None,
+            scenario_counts=review.get("scenario_counts") if isinstance(review, dict) else None,
         )
         if isinstance(review, dict):
             row["model_coverage_status"] = str(review.get("coverage_status") or "")

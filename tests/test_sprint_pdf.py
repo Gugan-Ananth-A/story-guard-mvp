@@ -60,7 +60,7 @@ def test_rollup_uses_only_current_scores_and_score_bucket_math(
     assert "121213" in first_page and "SNAP Login Screen" in first_page
     assert "SYN-2401" in first_page and "Update account contact details" in first_page
     assert "Digital Banking" not in first_page
-    assert "0%" in first_page and "33%" in first_page
+    assert "0%" in first_page and "60%" in first_page
     assert "none" in first_page and "partial" in first_page
     assert "\n0\n" in first_page and "\n1\n" in first_page
     lines = first_page.splitlines()
@@ -80,7 +80,7 @@ def test_rollup_uses_only_current_scores_and_score_bucket_math(
         "Update account contact details",
         "High",
         "1",
-        "33%",
+        "60%",
         "partial",
         "Included",
     ]
